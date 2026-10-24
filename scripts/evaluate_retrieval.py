@@ -42,6 +42,9 @@ def main() -> int:
         print(f"[ERREUR] Références absentes du corpus : {', '.join(unknown)}")
         return 1
 
+    off_topic = [question.id for question in questions if not question.expected]
+    questions = [question for question in questions if question.expected]  # no expected article: no rank to measure
+
     settings = load_settings()
     embedder = make_embedder(settings, settings.query_embedding_device)
     ranks: list[int | None] = []
@@ -67,6 +70,8 @@ def main() -> int:
     total = len(questions)
     print(f"\nhit@1 : {hit_at_k(ranks, 1)}/{total}   (l'article attendu arrive en premier)")
     print(f"hit@5 : {hit_at_k(ranks, 5)}/{total}   (l'article attendu est dans les 5 premiers passages)")
+    if off_topic:
+        print(f"Questions hors sujet, sans article attendu, non comptées : {', '.join(off_topic)}")
     return 0
 
 
