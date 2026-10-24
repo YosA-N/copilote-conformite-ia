@@ -17,10 +17,16 @@ import chromadb
 from chromadb.config import Settings as ChromaSettings
 
 from compliance_copilot.embeddings import Embedder
+from compliance_copilot.lexical import BM25, reciprocal_rank_fusion
+from compliance_copilot.lexicon import expand_query
 
 COLLECTION_NAME = "chunks"
 MANIFEST_NAME = "manifest.json"
 BATCH_SIZE = 16  # chunks sent to the embedding model at once
+SEARCH_MODES = ("vector", "hybrid")
+LEXICON_TARGETS = ("off", "keywords", "all")
+HYBRID_CANDIDATES = 50  # chunks taken from each ranking before fusion
+_KEYWORD_INDEXES: dict[tuple, BM25] = {}
 
 
 class IndexNotReadyError(RuntimeError):
@@ -124,8 +130,31 @@ def build_index(
     return BuildReport("built", len(chunks), seconds)
 
 
-def search(question: str, index_dir: Path, embedder: Embedder, k: int = 5) -> list[SearchResult]:
-    """The k chunks closest to the question, best first."""
+def _keyword_index(index_dir: Path, manifest: dict) -> BM25:
+    """BM25 over every chunk of the index, built once per index version and kept in memory."""
+    key = (str(index_dir), manifest["corpus_sha256"], manifest["built_at"])
+    if key not in _KEYWORD_INDEXES:
+        stored = open_collection(index_dir).get(include=["documents"])
+        _KEYWORD_INDEXES[key] = BM25(stored["ids"], stored["documents"])
+    return _KEYWORD_INDEXES[key]
+
+
+def search(
+    question: str,
+    index_dir: Path,
+    embedder: Embedder,
+    k: int = 5,
+    mode: str = "vector",
+    lexicon: str = "off",
+) -> list[SearchResult]:
+    """The k chunks closest to the question, best first.
+
+    mode "vector" ranks by meaning only; "hybrid" also ranks by keywords (BM25) and fuses both
+    rankings (RRF). lexicon "keywords" adds legal wording to the keyword query, "all" to both
+    queries. The score is always the cosine similarity between the question and the chunk.
+    """
+    if mode not in SEARCH_MODES or lexicon not in LEXICON_TARGETS:
+        raise ValueError(f"mode doit valoir {SEARCH_MODES} et lexicon {LEXICON_TARGETS}")
     manifest = read_manifest(index_dir)
     if manifest is None:
         raise IndexNotReadyError("L'index n'existe pas encore : lancez d'abord scripts\\build_index.py.")
@@ -134,10 +163,26 @@ def search(question: str, index_dir: Path, embedder: Embedder, k: int = 5) -> li
             f"L'index a été construit avec le modèle {manifest['embedding_model']}, mais .env demande "
             f"{embedder.model} : relancez scripts\\build_index.py."
         )
-    vector = embedder.embed([question])[0]
-    found = open_collection(index_dir).query(query_embeddings=[vector], n_results=k, include=["documents", "metadatas", "distances"])
-    rows = zip(found["ids"][0], found["documents"][0], found["metadatas"][0], found["distances"][0])
-    return [
-        SearchResult(rank=rank, score=1 - distance, id=chunk_id, text=text, metadata=metadata)
-        for rank, (chunk_id, text, metadata, distance) in enumerate(rows, start=1)
-    ]
+    expanded = expand_query(question) if lexicon != "off" else question
+    vector = embedder.embed([expanded if lexicon == "all" else question])[0]
+    collection = open_collection(index_dir)
+
+    if mode == "vector":
+        found = collection.query(query_embeddings=[vector], n_results=k, include=["documents", "metadatas", "distances"])
+        rows = zip(found["ids"][0], found["documents"][0], found["metadatas"][0], found["distances"][0])
+        return [
+            SearchResult(rank=rank, score=1 - distance, id=chunk_id, text=text, metadata=metadata)
+            for rank, (chunk_id, text, metadata, distance) in enumerate(rows, start=1)
+        ]
+
+    by_meaning = collection.query(query_embeddings=[vector], n_results=HYBRID_CANDIDATES, include=[])["ids"][0]
+    by_keywords = [chunk_id for chunk_id, _ in _keyword_index(index_dir, manifest).search(expanded, HYBRID_CANDIDATES)]
+    best = [chunk_id for chunk_id, _ in reciprocal_rank_fusion([by_meaning, by_keywords])[:k]]
+    stored = collection.get(ids=best, include=["documents", "metadatas", "embeddings"])
+    found = dict(zip(stored["ids"], zip(stored["documents"], stored["metadatas"], stored["embeddings"])))
+    results = []
+    for rank, chunk_id in enumerate(best, start=1):
+        text, metadata, embedding = found[chunk_id]
+        similarity = float(sum(a * b for a, b in zip(vector, embedding)))  # both vectors are normalised
+        results.append(SearchResult(rank=rank, score=similarity, id=chunk_id, text=text, metadata=metadata))
+    return results
