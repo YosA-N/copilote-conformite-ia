@@ -139,6 +139,25 @@ def _keyword_index(index_dir: Path, manifest: dict) -> BM25:
     return _KEYWORD_INDEXES[key]
 
 
+def article_of(chunk_id: str) -> str:
+    """'gdpr:art_37:par_1' → 'gdpr:art_37': the article or annex a chunk belongs to."""
+    return ":".join(chunk_id.split(":")[:2])
+
+
+def limit_per_article(chunk_ids: list[str], limit: int | None) -> list[str]:
+    """Keep at most `limit` chunks of each article, in order, so that one long article cut into
+    paragraphs cannot fill all the places (None: no limit)."""
+    if not limit:
+        return chunk_ids
+    kept, counts = [], {}
+    for chunk_id in chunk_ids:
+        article = article_of(chunk_id)
+        if counts.get(article, 0) < limit:
+            kept.append(chunk_id)
+            counts[article] = counts.get(article, 0) + 1
+    return kept
+
+
 def search(
     question: str,
     index_dir: Path,
@@ -146,12 +165,14 @@ def search(
     k: int = 5,
     mode: str = "vector",
     lexicon: str = "off",
+    max_per_article: int | None = None,
 ) -> list[SearchResult]:
     """The k chunks closest to the question, best first.
 
     mode "vector" ranks by meaning only; "hybrid" also ranks by keywords (BM25) and fuses both
     rankings (RRF). lexicon "keywords" adds legal wording to the keyword query, "all" to both
-    queries. The score is always the cosine similarity between the question and the chunk.
+    queries. max_per_article keeps at most that many chunks of the same article. The score is
+    always the cosine similarity between the question and the chunk.
     """
     if mode not in SEARCH_MODES or lexicon not in LEXICON_TARGETS:
         raise ValueError(f"mode doit valoir {SEARCH_MODES} et lexicon {LEXICON_TARGETS}")
@@ -168,16 +189,19 @@ def search(
     collection = open_collection(index_dir)
 
     if mode == "vector":
-        found = collection.query(query_embeddings=[vector], n_results=k, include=["documents", "metadatas", "distances"])
-        rows = zip(found["ids"][0], found["documents"][0], found["metadatas"][0], found["distances"][0])
+        candidates = k * 4 if max_per_article else k  # room to skip the extra chunks of an article
+        found = collection.query(query_embeddings=[vector], n_results=candidates, include=["documents", "metadatas", "distances"])
+        rows = dict(zip(found["ids"][0], zip(found["documents"][0], found["metadatas"][0], found["distances"][0])))
+        best = limit_per_article(found["ids"][0], max_per_article)[:k]
         return [
-            SearchResult(rank=rank, score=1 - distance, id=chunk_id, text=text, metadata=metadata)
-            for rank, (chunk_id, text, metadata, distance) in enumerate(rows, start=1)
+            SearchResult(rank=rank, score=1 - rows[chunk_id][2], id=chunk_id, text=rows[chunk_id][0], metadata=rows[chunk_id][1])
+            for rank, chunk_id in enumerate(best, start=1)
         ]
 
     by_meaning = collection.query(query_embeddings=[vector], n_results=HYBRID_CANDIDATES, include=[])["ids"][0]
     by_keywords = [chunk_id for chunk_id, _ in _keyword_index(index_dir, manifest).search(expanded, HYBRID_CANDIDATES)]
-    best = [chunk_id for chunk_id, _ in reciprocal_rank_fusion([by_meaning, by_keywords])[:k]]
+    fused = [chunk_id for chunk_id, _ in reciprocal_rank_fusion([by_meaning, by_keywords])]
+    best = limit_per_article(fused, max_per_article)[:k]
     stored = collection.get(ids=best, include=["documents", "metadatas", "embeddings"])
     found = dict(zip(stored["ids"], zip(stored["documents"], stored["metadatas"], stored["embeddings"])))
     results = []

@@ -2,7 +2,7 @@
 
 import pytest
 
-from compliance_copilot.index import search
+from compliance_copilot.index import article_of, limit_per_article, search
 from compliance_copilot.lexical import BM25, reciprocal_rank_fusion, tokenize
 from compliance_copilot.lexicon import expand_query
 
@@ -48,6 +48,24 @@ def test_hybrid_search_returns_the_best_chunks_with_their_similarity(index_dir, 
     assert [result.rank for result in results] == [1, 2, 3]
     assert results[0].id == "gdpr:art_37"
     assert all(-1 <= result.score <= 1 for result in results)
+
+
+def test_at_most_n_chunks_of_the_same_article_are_kept_in_order():
+    ranked = ["ai_act:art_50:par_4", "ai_act:art_50:par_1", "ai_act:art_26:par_3", "ai_act:art_50:par_2", "ai_act:art_26:par_1", "ai_act:art_4"]
+
+    assert article_of("gdpr:art_37:par_1") == "gdpr:art_37"
+    assert limit_per_article(ranked, 2) == [
+        "ai_act:art_50:par_4", "ai_act:art_50:par_1", "ai_act:art_26:par_3", "ai_act:art_26:par_1", "ai_act:art_4",
+    ]
+    assert limit_per_article(ranked, None) == ranked
+
+
+def test_search_respects_the_limit_per_article(index_dir, fake_embedder):
+    results = search("désignation délégué", index_dir, fake_embedder, k=6, max_per_article=1)
+
+    articles = [article_of(result.id) for result in results]
+    assert len(articles) == len(set(articles))
+    assert [result.rank for result in results] == list(range(1, len(results) + 1))
 
 
 def test_unknown_search_options_are_rejected(index_dir, fake_embedder):

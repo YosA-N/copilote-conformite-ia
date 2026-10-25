@@ -17,27 +17,38 @@ from pathlib import Path
 
 from compliance_copilot.embeddings import Embedder
 from compliance_copilot.index import SearchResult, search
+from compliance_copilot.lexical import tokenize
 from compliance_copilot.llm import ChatModel, Generation
 
-SYSTEM_PROMPT = """Tu es le copilote de conformité : tu aides les PME et les associations à comprendre le RGPD et l'AI Act.
+# Written with "vous" from start to end: a prompt that says "tu" to the model makes it say "tu" to the user.
+SYSTEM_PROMPT = """Vous êtes le copilote de conformité : vous aidez les PME et les associations à comprendre le RGPD et l'AI Act.
 
-Réponds toujours en deux parties, dans cet ordre :
+Répondez toujours en deux parties, dans cet ordre :
 
 EXTRAITS :
 - [numéro du passage] « phrase recopiée mot pour mot dans ce passage »
-(quatre extraits au plus, chacun sur sa ligne ; chaque extrait est une seule phrase ou un seul point a), b)…, jamais un paragraphe entier ; choisis seulement ce qui répond directement à la question ; recopie exactement, sans modifier ni résumer ; si tu sautes une partie d'une phrase, remplace-la par « … »)
+(quatre extraits au plus, chacun sur sa ligne ; chaque extrait est une seule phrase ou un seul point a), b)…, jamais un paragraphe entier ; choisissez seulement ce qui répond à la question ; recopiez exactement, sans modifier ni résumer ; si vous sautez une partie d'une phrase, remplacez-la par « … »)
 
 RÉPONSE :
-ta réponse, écrite uniquement à partir des extraits ci-dessus, avec le numéro du passage entre crochets après chaque affirmation, par exemple [1].
+la réponse, écrite uniquement à partir des extraits ci-dessus, avec le numéro du passage entre crochets à la fin de chaque phrase qui s'appuie sur lui.
+
+Exemple de forme (contenu fictif) :
+EXTRAITS :
+- [2] « Le texte prévoit une obligation X pour l'organisme. »
+- [4] « Cette obligation ne s'applique pas dans le cas Y. »
+RÉPONSE :
+Oui, votre organisme doit respecter l'obligation X [2]. Elle ne s'applique pas dans le cas Y [4].
 
 Règles à respecter :
-1. Utilise UNIQUEMENT les passages fournis, numérotés [1], [2]… N'utilise aucune autre connaissance.
-2. Si aucun passage ne répond à la question, écris « EXTRAITS : aucun » puis « RÉPONSE : Les textes trouvés ne permettent pas de répondre à cette question. »
-3. N'invente jamais de numéro d'article, de date, de durée ni de délai : reprends uniquement ceux des extraits.
-4. Vérifie que chaque extrait s'applique bien à la situation de la question : à qui s'adresse le texte (responsable du traitement, sous-traitant, fournisseur, déployeur…) et dans quel cas. Sinon, ne l'utilise pas.
-5. Distingue ce qui est obligatoire (« doit ») de ce qui est permis (« peut »).
-6. Écris en français simple, pour une personne qui n'est pas juriste, et vouvoie-la. Commence par la réponse directe en une ou deux phrases, puis explique brièvement.
-7. Ne donne aucun conseil qui ne figure pas dans les extraits."""
+1. Utilisez UNIQUEMENT les passages fournis, numérotés [1], [2]… N'utilisez aucune autre connaissance.
+2. Si aucun passage ne répond à la question, écrivez « EXTRAITS : aucun » puis « RÉPONSE : Les textes trouvés ne permettent pas de répondre à cette question. »
+3. N'inventez jamais de numéro d'article, de date, de durée ni de délai : reprenez uniquement ceux des extraits.
+4. Vérifiez que chaque extrait s'applique bien à la situation de la question : à qui s'adresse le texte (responsable du traitement, sous-traitant, fournisseur, déployeur…) et dans quel cas. Sinon, ne l'utilisez pas.
+5. Distinguez ce qui est obligatoire (« doit ») de ce qui est permis (« peut »).
+6. Ne concluez jamais qu'il n'y a « aucune obligation » ou que quelque chose « ne s'applique pas » parce que les passages n'en parlent pas : écrivez plutôt « les passages trouvés ne traitent pas de ce point ». N'affirmez une absence d'obligation que si un extrait le dit explicitement.
+7. Répondez à chaque partie de la question. Quand les extraits ne donnent qu'un principe général (par exemple, une durée de conservation « pas plus longue que nécessaire »), dites-le et précisez que les règles concrètes (durées, montants, modalités) peuvent venir d'autres textes, comme le droit national ou les recommandations de la CNIL.
+8. Vouvoyez toujours la personne : jamais « tu », « toi », « ton », « ta », « tes ». Écrivez en français simple, pour une personne qui n'est pas juriste. Commencez par la réponse directe en une ou deux phrases, puis expliquez brièvement.
+9. Ne donnez aucun conseil qui ne figure pas dans les extraits."""
 
 REFUSAL = "Les textes trouvés ne permettent pas de répondre à cette question."
 DISCLAIMER = (
@@ -55,6 +66,23 @@ EXTRACTS_HEADER = re.compile(r"^[\s*#>_-]*EXTRAITS?\s*[*_]*\s*:?[*_]*", re.IGNOR
 ITEM_START = re.compile(r"^[\s>*•-]*(?:-|•|\[\d+)")  # a new extract: "- …" or "[2] …"
 ITEM = re.compile(r"^[\s>*•-]*(?:\[(\d+)[a-z]?\])?\s*[:–-]?\s*(.*)$", re.DOTALL)
 ELLIPSIS = re.compile(r"\[\s*(?:…|\.\.\.)\s*\]|\(\s*(?:…|\.\.\.)\s*\)|…|\.\.\.")
+
+# Checks of the answer text (session 5 bis). The 35 % threshold was chosen by the author after
+# measuring: at 60 %, 19 of 27 correct-looking answers got an alert; at 35 %, the three known wrong
+# sentences (tests/test_rag.py) are still flagged.
+SUPPORT_THRESHOLD = 0.35
+MIN_SENTENCE_STEMS = 4  # "Oui." or "Voici les cas :" prove nothing either way
+TUTOIEMENT = re.compile(r"\b(?:tu|toi|te|ton|ta|tes)\b|\bt['’](?=\w)", re.IGNORECASE)
+ABSENCE_CLAIM = re.compile(
+    r"\baucune?s? (?:obligation|règle|exigence|formalité)"
+    r"|\bpas (?:d['’]obligation|obligatoire|tenue?s? de|soumise?s? à)"
+    r"|\bne (?:vous )?(?:s['’]appliquen?t|concernen?t) pas"
+    r"|\bn['’](?:est|êtes|sont|avez|y a) (?:pas|aucun)"
+    r"|\bne (?:pouvez|pouvons|peut|peuvent|devez|doit) pas",
+    re.IGNORECASE,
+)
+NEGATION = re.compile(r"\b(?:ne|n['’])\b[^.;:]{0,80}?\b(?:pas|ni|aucune?)\b|\baucune?s?\b|\binterdite?s?\b|\bn['’]\w+ pas\b", re.IGNORECASE)
+ABOUT_PASSAGES = re.compile(r"\b(?:passages?|extraits?|textes? trouvés)\b", re.IGNORECASE)
 
 
 @dataclass
@@ -324,11 +352,52 @@ def build_sources(passages: list[SearchResult], cited: list[int]) -> list[Source
     ]
 
 
+# ---------------------------------------------------------------- checks of the answer text
+
+
+def answer_sentences(text: str) -> list[str]:
+    """The sentences and list items of an answer, without the [n] citations; very short ones are left out."""
+    parts = re.split(r"(?<=[.!?])\s+|\n+", text)
+    sentences = [re.sub(r"^[\s>*•-]+", "", CITATION.sub("", part)).strip() for part in parts]
+    return [sentence for sentence in sentences if len(tokenize(sentence)) >= MIN_SENTENCE_STEMS]
+
+
+def support_ratio(sentence: str, extracts: list[str]) -> float:
+    """Share of the significant words (stems) of the sentence that appear in the verified extracts."""
+    words = set(tokenize(sentence))
+    pool = set().union(*(set(tokenize(extract)) for extract in extracts)) if extracts else set()
+    return len(words & pool) / len(words) if words else 1.0
+
+
+def unsupported_sentences(text: str, extracts: list[str], threshold: float = SUPPORT_THRESHOLD) -> list[str]:
+    """Sentences of the answer that share too few words with the verified extracts."""
+    return [sentence for sentence in answer_sentences(text) if support_ratio(sentence, extracts) < threshold]
+
+
+def unbacked_absence_claims(text: str, extracts: list[str]) -> list[str]:
+    """Sentences that state an absence or an impossibility ("aucune obligation", "ne s'applique pas",
+    "vous ne pouvez pas"…) while no verified extract says anything negative."""
+    if any(NEGATION.search(extract) for extract in extracts):
+        return []
+    # "les passages trouvés ne traitent pas de ce point" speaks of the passages, not of the law: it is the wording the prompt asks for
+    return [sentence for sentence in answer_sentences(text) if ABSENCE_CLAIM.search(sentence) and not ABOUT_PASSAGES.search(sentence)]
+
+
+def uses_tu(text: str) -> bool:
+    """True if the answer says "tu", "ton", "ta"… to the person instead of "vous"."""
+    return bool(TUTOIEMENT.search(text))
+
+
+def _short(sentence: str, length: int = 120) -> str:
+    return sentence if len(sentence) <= length else sentence[:length].rsplit(" ", 1)[0] + " …"
+
+
 # ---------------------------------------------------------------- answer
 
 
 def _warnings(found: int, passages: list[SearchResult], chat_model: ChatModel, generation: Generation,
-              extracts: list[Extract], refused: bool, citations: CitationCheck, answer_written: bool) -> list[str]:
+              extracts: list[Extract], refused: bool, citations: CitationCheck, answer_written: bool,
+              answer_text: str) -> list[str]:
     warnings = []
     if len(passages) < found:
         warnings.append(
@@ -363,8 +432,20 @@ def _warnings(found: int, passages: list[SearchResult], chat_model: ChatModel, g
     if unsupported:
         listed = ", ".join(f"[{number}]" for number in unsupported)
         warnings.append(f"La réponse cite {listed} sans extrait vérifié de ce(s) passage(s) : vérifiez ces affirmations.")
+    verified_texts = [extract.text for extract in extracts if extract.verified]
     if not citations.cited and not citations.unknown:
-        warnings.append("La réponse ne cite aucun passage : vérifiez-la avec les extraits et les sources.")
+        # without [n], the answer must at least repeat the words of the verified extracts
+        weak = unsupported_sentences(answer_text, verified_texts)
+        if weak:
+            more = f" (et {len(weak) - 1} autre(s))" if len(weak) > 1 else ""
+            warnings.append(
+                f"La réponse ne cite aucun passage et une phrase ne reprend pas les extraits vérifiés : « {_short(weak[0])} »{more}. "
+                "Vérifiez-la dans les textes."
+            )
+    for claim in unbacked_absence_claims(answer_text, verified_texts):
+        warnings.append(f"La réponse affirme une absence ou une impossibilité qu'aucun extrait ne dit : « {_short(claim)} ». Vérifiez ce point.")
+    if uses_tu(answer_text):
+        warnings.append("La réponse tutoie la personne (« tu », « ton »…) alors que le copilote doit toujours vouvoyer.")
     return warnings
 
 
@@ -377,10 +458,11 @@ def answer_question(
     on_text: Callable[[str], None] | None = None,
     mode: str = "vector",
     lexicon: str = "off",
+    max_per_article: int | None = None,
 ) -> RagAnswer:
     """Search the closest passages, have the model quote them and answer, then check everything."""
     start = time.perf_counter()
-    found = search(question, index_dir, embedder, k=k, mode=mode, lexicon=lexicon)
+    found = search(question, index_dir, embedder, k=k, mode=mode, lexicon=lexicon, max_per_article=max_per_article)
     search_seconds = time.perf_counter() - start
     passages = fit_passages(question, found, chat_model)
     return answer_from_passages(question, passages, chat_model, on_text, search_seconds, found=len(found))
@@ -416,7 +498,8 @@ def answer_from_passages(
         sources=build_sources(passages, cited),
         citations=citations,
         warnings=_warnings(
-            found if found is not None else len(passages), passages, chat_model, generation, extracts, refused, citations, answer_written
+            found if found is not None else len(passages), passages, chat_model, generation, extracts, refused, citations, answer_written,
+            text,
         ),
         generation=generation,
         search_seconds=search_seconds,

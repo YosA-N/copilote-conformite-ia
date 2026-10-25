@@ -34,6 +34,7 @@ def main() -> int:
     parser.add_argument("--questions", type=Path, default=EVAL_DIR / "questions_v0.jsonl")
     parser.add_argument("--mode", choices=SEARCH_MODES, help="mode de recherche (par défaut : SEARCH_MODE du .env)")
     parser.add_argument("--lexicon", choices=LEXICON_TARGETS, help="lexique (par défaut : SEARCH_LEXICON du .env)")
+    parser.add_argument("--max-per-article", type=int, help="passages d'un même article au plus, 0 = sans limite (par défaut : .env)")
     args = parser.parse_args()
     questions = load_questions(args.questions)
 
@@ -50,11 +51,13 @@ def main() -> int:
     settings = load_settings()
     embedder = make_embedder(settings, settings.query_embedding_device)
     mode, lexicon = args.mode or settings.search_mode, args.lexicon or settings.search_lexicon
+    limit = settings.search_max_per_article if args.max_per_article is None else (args.max_per_article or None)
     ranks: list[int | None] = []
-    print(f"{len(questions)} questions, recherche « {mode} », lexique « {lexicon} », rang cherché parmi les {DEPTH} premiers passages\n")
+    print(f"{len(questions)} questions, recherche « {mode} », lexique « {lexicon} », au plus {limit or 'tous les'} passages par article, "
+          f"rang cherché parmi les {DEPTH} premiers passages\n")
     for question in questions:
         try:
-            results = search(question.question, INDEX_DIR, embedder, k=DEPTH, mode=mode, lexicon=lexicon)
+            results = search(question.question, INDEX_DIR, embedder, k=DEPTH, mode=mode, lexicon=lexicon, max_per_article=limit)
         except (IndexNotReadyError, EmbeddingError) as error:
             print(f"[ERREUR] {error}")
             return 1

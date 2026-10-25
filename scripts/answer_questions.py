@@ -98,7 +98,8 @@ def main() -> int:
         print(f"{question.id} : {question.question}", flush=True)
         try:
             answer = answer_question(
-                question.question, INDEX_DIR, embedder, chat_model, mode=settings.search_mode, lexicon=settings.search_lexicon
+                question.question, INDEX_DIR, embedder, chat_model, mode=settings.search_mode, lexicon=settings.search_lexicon,
+                max_per_article=settings.search_max_per_article,
             )
         except (IndexNotReadyError, EmbeddingError, LLMError) as error:
             print(f"[ERREUR] {error}")
@@ -127,8 +128,11 @@ def main() -> int:
         f"{settings.llm_max_tokens} tokens au plus par réponse",
         "- Prompt : le modèle recopie d'abord les phrases exactes des passages (EXTRAITS), puis répond à partir d'elles "
         "seulement (RÉPONSE) ; le code vérifie chaque extrait mot pour mot et remplace par un refus une réponse sans extrait vérifié",
+        "- Contrôles du code sur la réponse : citations [n], phrases trop éloignées des extraits vérifiés (si aucune citation), "
+        "affirmations d'absence sans extrait négatif, tutoiement",
         f"- Recherche : `{settings.embedding_model}` (sur {settings.query_embedding_device.upper()}), mode « {settings.search_mode} », "
-        f"lexique « {settings.search_lexicon} », 5 passages par question",
+        f"lexique « {settings.search_lexicon} », 5 passages par question, "
+        + (f"{settings.search_max_per_article} au plus par article" if settings.search_max_per_article else "sans limite par article"),
         f"- Corpus : versions consolidées {versions}",
         "- Questions : `eval/questions_v0.jsonl` (10) et `eval/questions_offtopic_v0.jsonl` (2, hors sujet)",
         "",
