@@ -41,7 +41,7 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
   - **Au plus 2 passages d'un même article** (séance 5 bis, `SEARCH_MAX_PER_ARTICLE=2`, `limit_per_article` dans `index.py`) : la recherche prend 4 × k candidats, puis écarte le 3e morceau d'un article et les suivants. Cause générale corrigée : un long article découpé en paragraphes occupait tout le top 5 (q10 : art. 50 ×2 et art. 26 ×3, art. 4 au rang 7).
 - **Évaluation** : `eval/questions_v0.jsonl` (10 questions types, articles attendus vérifiés dans le texte), mesurée par `evaluate_retrieval.py` (hit@1, hit@5, rang du premier article attendu). On mesure d'abord ; on ne retouche pas les questions pour améliorer le score.
   - **Règle anti-triche** : `eval/questions_v1.jsonl` (20 questions, dont 3 hors sujet, figées au commit `c57bc66` avant toute amélioration) sert **seulement à mesurer**. On règle sur v0, jamais sur v1. Un changement est gardé s'il ne fait baisser le hit@5 sur **aucun** jeu (v0, v1) et fait monter au moins une mesure (règle assouplie à la séance 5 bis, décision de l'auteur : avant, il fallait une amélioration sur les deux jeux).
-  - Relectures humaines de référence : `eval/review_v0.md` et `eval/review_v1.md` (séance 5 bis : 9 justes, 2 partielles q02 et q06, 1 fausse et dangereuse q10). Mesures des séances 5 et 5 bis : `eval/results_v1.md`.
+  - Relectures humaines de référence : `eval/review_v0.md`, `eval/review_v1.md` (v1 : 9 justes, 2 partielles q02 et q06, 1 fausse et dangereuse q10 ; **meilleure version relue**) et `eval/review_v2.md` (v2 : 6 justes, 5 partielles q01, q02, q06, q07, q10, 1 fausse q08). Mesures des séances 5, 5 bis et 5 ter : `eval/results_v1.md`.
   - Les vecteurs des questions calculés sur le CPU varient très légèrement d'un lancement à l'autre : ±1 rang possible sur les passages aux scores presque égaux (q16). Répéter les mesures (`compare_retrieval.py --repeat 3`) avant de conclure.
   - Mesure de référence (séance 3, `bge-m3`, chunks de 4 000 caractères au plus) : **hit@1 = 6/10, hit@5 = 7/10**. Échecs : q03 durée de conservation (rang 6, réponse partielle dans le corpus), q04 mention d'information (rang 20), q10 IA générative au travail (art. 4 non trouvé dans les 20 premiers). Les sigles DPO et AIPD passent (rang 1). Pistes à étudier à la séance 5.
   - Séance 5 (meilleure configuration) : v0 **hit@1 = 7/10, hit@5 = 9/10** ; v1 **hit@1 = 10/17, hit@5 = 13/17** (départ v1 : 9/17 et 11–12/17). q10 (art. 4) et q21 (art. 32) restent hors des 5 premiers.
@@ -62,6 +62,36 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
     - Toujours : alerte sur une affirmation d'absence ou d'impossibilité (« aucune obligation », « ne s'applique pas », « vous ne pouvez pas »…) si aucun extrait vérifié ne contient de négation. Effet connu : signale aussi des déductions justes (q01 « cela n'est pas obligatoire »).
     - Toujours : alerte sur le tutoiement (tu, toi, te, t', ton, ta, tes).
     - Tests de non-régression (`tests/test_rag.py`, `KNOWN_WRONG`) : les phrases fausses de q03 v0 (« 10 ans »), q09 v0 (« vous ne pouvez pas ») et q10 v1 (« aucune obligation… usage interne ») doivent rester signalées, avec leurs vrais extraits.
+  - **Prompt de la séance 5 ter (v3)** : règles générales en plus. Exceptions et conditions recopiées mot pour mot entre « » ; chaque obligation nomme son règlement, son article et qui est visé ; jamais deux obligations de textes différents sous un même nom ; listes de cas reprises en entier ou annoncées comme partielles (« parmi d'autres cas ») ; un extrait de chaque passage utile d'abord ; 6 extraits au plus (avant : 4). Exemple du prompt toujours fictif. Longueur : 3 678 caractères (v1 : 1 622, v2 : 2 613).
+  - **Contrôles de la séance 5 ter** (`rag.py`, une alerte par type et par réponse au plus) :
+    - négation ajoutée ou retirée dans une condition ou une exception par rapport à l'extrait le plus proche (`flipped_negations` : au moins 50 % de mots communs ; 12 mots côté réponse, 12 ou 24 côté extrait) ;
+    - texte entre « » d'au moins 3 mots absent des extraits vérifiés (`quotes_not_in_extracts`) ;
+    - exception (« sauf si »…) hors « » qui partage moins de 60 % de ses mots avec chaque extrait (`unquoted_exceptions`) ;
+    - liste de cas (annonce « lorsque : », « cas suivants », « conditions suivantes »… ; pas les listes de contenu « informations suivantes ») reprise en partie sans « parmi », « entre autres », « liste complète » (`incomplete_case_lists`) ; « notamment » ne compte pas ;
+    - obligation dont l'extrait vise un fournisseur, un importateur ou un distributeur (et pas aussi le déployeur ou le responsable du traitement), sans nommer cet acteur (`other_actor_duties`) ;
+    - phrase sans nom de règlement, seulement si la réponse s'appuie sur le RGPD et l'AI Act (`unnamed_regulations`).
+    - Tests de non-régression avec les vraies phrases fausses de la v2 : q08 (négation inversée), q01 (liste 0 cas sur 3, exception inventée), q10 (obligation du fournisseur), q07 (règlement non nommé).
+  - `compare_models.py --prompt-file` compare un autre prompt (par exemple celui d'une séance précédente, tiré de Git) sur les mêmes passages, le même jour.
+  - **Mesures séance 5 ter** (`eval/results_v1.md`, section 8), prompt v1 contre prompt v3, le même jour, sur les mêmes passages (32 questions) :
+
+    | | Prompt v1 | Prompt v3 |
+    |---|---|---|
+    | [n] | 4/26 | 28/28 |
+    | Tutoiements | 3 | 0 |
+    | Réponses avec alerte | 19/32 | 15/32 |
+    | Hors sujet refusés | 5/5 | 4/5 (h05 traitée) |
+    | Réponses coupées | 0 | 2 |
+    | Mots par réponse | 80 | 131 |
+    | Tokens lus | 2 604 | 3 186 |
+    | Temps | 30,9 s | 32,8 s |
+    | Extraits vérifiés | 70/75 | 78/85 |
+
+  - **Lecture de `answers_v3.md`** : q01 (3 cas), q02 (« non occasionnel »), q06 (art. 34), q07 (deux analyses séparées) et q08 (exception fidèle) progressent par rapport à la v2 et au prompt v1. q08 et q10 présentent encore l'obligation du fournisseur (art. 50, § 1) comme celle de l'utilisateur ; le code le signale. Pas de retour au prompt v1 proposé.
+  - **Reculs de la v3** : h05 traitée, 2 réponses coupées, réponses 60 % plus longues. Cause probable : la règle « un extrait de chaque passage utile d'abord » et la limite de 6 extraits. Piste : retirer cette règle, puis remesurer.
+  - **Contrôles** :
+    - le moins utile est « règlement non nommé », qui donne des alertes sans vraie confusion et ne voit pas q07 v2 ;
+    - fausse alerte « négation » sur q11 v3 (le morceau comparé déborde après « : ») : correction proposée, non faite, car vue sur une question v1.
+  - Mesures faites **sur secteur** : sur batterie, Windows bride la carte graphique (état P8, 300 MHz, environ 10 min par réponse). Vérifier `BatteryStatus` (2 = sur secteur) avant une mesure.
   - Messages d'erreur clairs prévus : Ollama arrêté, modèle absent, mémoire insuffisante.
   - `rag.py` : prompt système en français et passages numérotés [1]…[5]. Si le prompt risque de dépasser le contexte, les derniers passages sont retirés et un avertissement est affiché.
   - Ce que fait le **code**, et non le modèle :
@@ -69,7 +99,7 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
     - sources construites à partir des métadonnées ;
     - réponse coupée signalée (`done_reason = "length"`) ;
     - avertissement « Information, pas un conseil juridique ».
-  - Réponses de référence non retouchées : `eval/answers_v0.md` (séance 4), `eval/answers_v1.md` (séance 5) et `eval/answers_v2.md` (séance 5 bis, à relire), produites par `answer_questions.py --version …` (10 questions et 2 hors sujet).
+  - Réponses de référence non retouchées : `eval/answers_v0.md` (séance 4), `eval/answers_v1.md` (séance 5), `eval/answers_v2.md` (séance 5 bis) et `eval/answers_v3.md` (séance 5 ter, à relire), produites par `answer_questions.py --version …` (10 questions et 2 hors sujet).
 - **Interface web** : Streamlit, plus tard.
 - **Dépendances** : on n'ajoute une bibliothèque qu'à l'étape qui en a besoin, avec une version épinglée (`==`) dans `requirements.txt`.
 
@@ -108,9 +138,9 @@ copy .env.example .env                                 # créer sa configuration
 .venv\Scripts\python scripts\search.py "question"      # afficher les 5 passages les plus proches
 .venv\Scripts\python scripts\evaluate_retrieval.py     # mesurer hit@1 et hit@5
 .venv\Scripts\python scripts\ask.py "question"         # poser une question (réponse + sources)
-.venv\Scripts\python scripts\answer_questions.py --version v2   # écrire eval/answers_v2.md (12 questions)
+.venv\Scripts\python scripts\answer_questions.py --version v3   # écrire eval/answers_v3.md (12 questions)
 .venv\Scripts\python scripts\compare_retrieval.py --repeat 3    # comparer les configurations de recherche (v0 et v1)
-.venv\Scripts\python scripts\compare_models.py ministral-3:3b qwen3:4b-instruct   # comparer les modèles sur les mêmes passages
+.venv\Scripts\python scripts\compare_models.py ministral-3:3b qwen3:4b-instruct   # comparer les modèles sur les mêmes passages (option --prompt-file : comparer un autre prompt)
 .venv\Scripts\python -m pytest                         # lancer les tests
 ```
 

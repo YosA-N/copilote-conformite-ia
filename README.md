@@ -2,7 +2,7 @@
 
 Assistant open source qui répond **en français** aux questions des PME et des associations sur le **RGPD** et l'**AI Act**, en **citant toujours l'article source**. Tout tourne **en local** et gratuitement, grâce à [Ollama](https://ollama.com).
 
-**Statut :** projet en construction. Le copilote répond aux questions en citant ses sources, en ligne de commande. La qualité des réponses est en cours d'évaluation.
+**Statut :** projet en construction. Le copilote répond aux questions en citant ses sources, en ligne de commande. La qualité des réponses est en cours d'évaluation : lisez les [limites connues](#limites-connues) avant de l'utiliser.
 
 > Ce copilote aide à comprendre les textes. Il ne remplace pas un conseil juridique.
 
@@ -78,13 +78,34 @@ Le code, et non le modèle :
   - si elle ne cite aucun passage [n], une phrase dont moins de 35 % des mots se retrouvent dans les extraits vérifiés ;
   - une phrase qui affirme une absence ou une impossibilité (« aucune obligation », « ne s'applique pas », « vous ne pouvez pas »…) alors qu'aucun extrait vérifié ne contient de négation ;
   - le tutoiement (« tu », « ton »…) : le copilote doit toujours vouvoyer ;
+  - une condition ou une exception (« sauf si », « lorsque »…) dont la négation a été ajoutée ou retirée par rapport à l'extrait ;
+  - un texte entre « » qui ne figure dans aucun extrait vérifié, et une exception reformulée sans reprendre les extraits ;
+  - une liste de cas a), b), c)… reprise seulement en partie, sans le dire ;
+  - une obligation qui vise un fournisseur, un importateur ou un distributeur, présentée sans nommer cet acteur ;
+  - une phrase qui ne dit pas de quel règlement elle vient, quand la réponse mêle RGPD et AI Act ;
 - ajoute l'avertissement « Information, pas un conseil juridique ».
 
 Limite : vérifier un extrait prouve que la phrase existe dans la loi, pas qu'elle répond bien à la question. Ces contrôles sont de simples signaux, sans compréhension du sens : ils peuvent laisser passer une erreur ou signaler une phrase juste. La relecture humaine reste nécessaire.
 
-Comptez environ 30 secondes par question avec une carte graphique de 4 Go.
+Comptez environ 30 à 45 secondes par question avec une carte graphique de 4 Go, ordinateur branché sur secteur (sur batterie, Windows peut brider la carte graphique et une réponse peut prendre plusieurs minutes).
 
-`scripts\answer_questions.py --version v2` pose les 10 questions de test et 2 questions hors sujet, puis enregistre les réponses brutes dans `eval/answers_v2.md` pour relecture (`eval/answers_v0.md` et `eval/answers_v1.md` gardent les versions précédentes, relues dans `eval/review_v0.md` et `eval/review_v1.md`). Les mesures avant/après sont dans `eval/results_v1.md`.
+`scripts\answer_questions.py --version v3` pose les 10 questions de test et 2 questions hors sujet, puis enregistre les réponses brutes dans `eval/answers_v3.md` pour relecture (`eval/answers_v0.md` à `eval/answers_v2.md` gardent les versions précédentes, relues dans `eval/review_v0.md` à `eval/review_v2.md`). Les mesures avant/après sont dans `eval/results_v1.md`.
+
+## Limites connues
+
+- **Petit modèle local** : `qwen3:4b-instruct` (4 milliards de paramètres) tourne sur une carte de 4 Go, mais il se trompe encore. Les relectures humaines (`eval/review_v*.md`) ont trouvé une exception inversée, des cas oubliés dans une liste, une obligation du fournisseur présentée comme celle de l'utilisateur, deux analyses d'impact confondues et des fautes de frappe.
+- **Contrôles automatiques imparfaits** : ils comparent des mots, sans comprendre le sens. Ils laissent passer des erreurs et signalent parfois des phrases justes. Une réponse sans alerte n'est pas une réponse garantie.
+- **Extrait vérifié ≠ bonne réponse** : un extrait vérifié prouve que la phrase existe dans la loi, pas qu'elle répond à la question posée ni qu'elle s'applique à votre situation.
+- **Relecture humaine nécessaire** : le copilote donne une information, pas un conseil juridique. Vérifiez toujours les articles cités sur EUR-Lex et, en cas de doute, demandez l'avis d'un professionnel ou de la CNIL.
+- **Corpus limité** : seulement le RGPD et l'AI Act (articles et annexes, versions consolidées indiquées plus bas). Le corpus ne contient pas :
+  - les considérants ;
+  - le droit national, comme la loi Informatique et Libertés ;
+  - les lignes directrices et la jurisprudence ;
+  - les fiches CNIL, prévues mais pas encore intégrées.
+
+  Les durées, montants et modalités concrètes viennent souvent de ces autres textes.
+- **Recherche imparfaite** : le passage utile n'est pas toujours parmi les 5 retenus. Par exemple, l'art. 32 (sécurité) n'est pas trouvé pour une des questions de test.
+- **Lenteur** : comptez 30 à 45 secondes par réponse avec une carte graphique de 4 Go, davantage sans carte graphique.
 
 ## Mémoire de la carte graphique
 
