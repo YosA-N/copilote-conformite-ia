@@ -15,7 +15,7 @@ from pathlib import Path
 from compliance_copilot.config import EVAL_DIR, INDEX_DIR, PROCESSED_DIR, load_settings
 from compliance_copilot.embeddings import EmbeddingError, make_embedder
 from compliance_copilot.evaluation import describe_reference, first_hit_rank, hit_at_k, load_questions, matches
-from compliance_copilot.index import IndexNotReadyError, SearchResult, load_chunks, search
+from compliance_copilot.index import LEXICON_TARGETS, SEARCH_MODES, IndexNotReadyError, SearchResult, load_chunks, search
 
 DEPTH = 20
 SHOWN_WHEN_MISSED = 3
@@ -32,6 +32,8 @@ def describe_result(result: SearchResult) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Mesure hit@1 et hit@5 sur les questions de test.")
     parser.add_argument("--questions", type=Path, default=EVAL_DIR / "questions_v0.jsonl")
+    parser.add_argument("--mode", choices=SEARCH_MODES, help="mode de recherche (par défaut : SEARCH_MODE du .env)")
+    parser.add_argument("--lexicon", choices=LEXICON_TARGETS, help="lexique (par défaut : SEARCH_LEXICON du .env)")
     args = parser.parse_args()
     questions = load_questions(args.questions)
 
@@ -42,13 +44,17 @@ def main() -> int:
         print(f"[ERREUR] Références absentes du corpus : {', '.join(unknown)}")
         return 1
 
+    off_topic = [question.id for question in questions if not question.expected]
+    questions = [question for question in questions if question.expected]  # no expected article: no rank to measure
+
     settings = load_settings()
     embedder = make_embedder(settings, settings.query_embedding_device)
+    mode, lexicon = args.mode or settings.search_mode, args.lexicon or settings.search_lexicon
     ranks: list[int | None] = []
-    print(f"{len(questions)} questions, rang cherché parmi les {DEPTH} premiers passages\n")
+    print(f"{len(questions)} questions, recherche « {mode} », lexique « {lexicon} », rang cherché parmi les {DEPTH} premiers passages\n")
     for question in questions:
         try:
-            results = search(question.question, INDEX_DIR, embedder, k=DEPTH)
+            results = search(question.question, INDEX_DIR, embedder, k=DEPTH, mode=mode, lexicon=lexicon)
         except (IndexNotReadyError, EmbeddingError) as error:
             print(f"[ERREUR] {error}")
             return 1
@@ -67,6 +73,8 @@ def main() -> int:
     total = len(questions)
     print(f"\nhit@1 : {hit_at_k(ranks, 1)}/{total}   (l'article attendu arrive en premier)")
     print(f"hit@5 : {hit_at_k(ranks, 5)}/{total}   (l'article attendu est dans les 5 premiers passages)")
+    if off_topic:
+        print(f"Questions hors sujet, sans article attendu, non comptées : {', '.join(off_topic)}")
     return 0
 
 

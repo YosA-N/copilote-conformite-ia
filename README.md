@@ -11,7 +11,7 @@ Assistant open source qui répond **en français** aux questions des PME et des 
 - Python 3.11 ou plus récent
 - [Ollama](https://ollama.com) installé et lancé, avec deux modèles :
   - `bge-m3` pour la recherche (`ollama pull bge-m3`, 1,2 Go) ;
-  - `ministral-3:3b` pour rédiger les réponses (`ollama pull ministral-3:3b`, 3,0 Go).
+  - `qwen3:4b-instruct` pour rédiger les réponses (`ollama pull qwen3:4b-instruct`, 2,5 Go), retenu après comparaison avec `ministral-3:3b` (voir `eval/results_v1.md`).
 - Une carte graphique NVIDIA avec 4 Go de mémoire suffit (testé sur une GTX 1650) ; sans elle, tout fonctionne sur le processeur, mais plus lentement.
 
 ## Installation (Windows, PowerShell)
@@ -54,6 +54,8 @@ Les textes viennent de [Cellar](https://op.europa.eu/fr/web/cellar), le dépôt 
 
 Chaque chunk est transformé en vecteur (**embedding**) par le modèle `bge-m3`, via Ollama, puis rangé dans une base [Chroma](https://www.trychroma.com) locale (`data/index/`). Une question est transformée de la même façon : les passages dont le vecteur est le plus proche (similarité cosinus) sont affichés avec leur score et leur lien EUR-Lex. L'index n'est recalculé que si `chunks.jsonl` ou le modèle changent. Le modèle et le matériel utilisé (carte graphique ou processeur) se règlent dans `.env`.
 
+Un petit **lexique** ajoute à la question le vocabulaire juridique des mots courants (« mention d'information » → « informations à fournir à la personne concernée », « DPO » → « délégué à la protection des données »…). Une recherche hybride par mots-clés (BM25) a aussi été testée : moins bonne sur les questions de mesure, elle n'est pas activée (`SEARCH_MODE=vector`, `SEARCH_LEXICON=all` dans `.env`).
+
 `evaluate_retrieval.py` pose les 10 questions de `eval/questions_v0.jsonl` et indique, pour chacune, le rang du premier article attendu, puis le **hit@1** (l'article attendu arrive en premier) et le **hit@5** (il est dans les 5 premiers passages).
 
 ## Poser une question
@@ -63,16 +65,20 @@ Chaque chunk est transformé en vecteur (**embedding**) par le modèle `bge-m3`,
 .venv\Scripts\python scripts\ask.py "Dois-je désigner un DPO ?" --show-passages   # montre aussi les passages lus par le modèle
 ```
 
-Le copilote cherche les 5 passages les plus proches, puis le modèle `ministral-3:3b` rédige une réponse à partir de ces seuls passages, numérotés [1] à [5], en les citant. Le texte s'affiche au fur et à mesure.
+Le copilote cherche les 5 passages les plus proches, numérotés [1] à [5]. Le modèle `qwen3:4b-instruct` recopie d'abord les phrases exactes des passages qui répondent (**extraits**), puis rédige sa réponse à partir de ces seules phrases, en citant les passages.
 
-Le code ajoute ensuite :
-- la liste des sources (règlement, article, titre, lien EUR-Lex, date de version), construite à partir des métadonnées et non par le modèle ;
-- une alerte si la réponse cite un passage inexistant, ne cite aucun passage, ou a été coupée par la limite de longueur ;
-- l'avertissement « Information, pas un conseil juridique ».
+Le code, et non le modèle :
+- **vérifie chaque extrait mot pour mot** dans le passage cité (seuls les espaces, le style des apostrophes et des guillemets, les majuscules et les coupures marquées « … » sont tolérés) ;
+- **remplace la réponse par « Les textes trouvés ne permettent pas de répondre à cette question. »** si aucun extrait n'est vérifié : une réponse sans appui dans les textes n'est jamais affichée, même en partie ;
+- affiche les extraits vérifiés, puis la liste des sources (règlement, article, titre, lien EUR-Lex, date de version), construite à partir des métadonnées ;
+- signale un extrait introuvable, une citation sans extrait vérifié, une citation vers un passage inexistant ou une réponse coupée par la limite de longueur ;
+- ajoute l'avertissement « Information, pas un conseil juridique ».
+
+Limite : vérifier un extrait prouve que la phrase existe dans la loi, pas qu'elle répond bien à la question. La relecture humaine reste nécessaire.
 
 Comptez environ 30 secondes par question avec une carte graphique de 4 Go.
 
-`scripts\answer_questions.py` pose les 10 questions de test et 2 questions hors sujet, puis enregistre les réponses brutes dans `eval/answers_v0.md` pour relecture.
+`scripts\answer_questions.py` pose les 10 questions de test et 2 questions hors sujet, puis enregistre les réponses brutes dans `eval/answers_v1.md` pour relecture (`eval/answers_v0.md` garde la version précédente). Les mesures avant/après sont dans `eval/results_v1.md`.
 
 ## Mémoire de la carte graphique
 
@@ -83,10 +89,10 @@ Le modèle de génération se règle dans `.env` :
 | `LLM_NUM_CTX` | `8192` | Taille du contexte en tokens : passages + question + réponse |
 | `LLM_NUM_GPU` | `99` | Couches du modèle placées sur la carte graphique (99 = toutes, le plus rapide) |
 | `LLM_TEMPERATURE` | `0.1` | Basse : réponses plus stables et plus fidèles aux passages |
-| `LLM_MAX_TOKENS` | `700` | Longueur maximale d'une réponse ; une réponse coupée est signalée |
+| `LLM_MAX_TOKENS` | `1500` | Longueur maximale (extraits + réponse) ; une réponse coupée est signalée |
 
-Avec ces valeurs, `ministral-3:3b` occupe 3,87 Go sur une carte de 4 Go. Si le copilote affiche « Mémoire insuffisante », par exemple parce qu'une autre application utilise la carte graphique, essayez dans cet ordre :
-1. baissez `LLM_NUM_CTX` à `6144` (3,66 Go mesurés) ou `4096` (3,45 Go) ;
+Avec ces valeurs, `qwen3:4b-instruct` occupe 3,68 Go sur une carte de 4 Go (`ministral-3:3b` : 3,87 Go). Si le copilote affiche « Mémoire insuffisante », par exemple parce qu'une autre application utilise la carte graphique, essayez dans cet ordre :
+1. baissez `LLM_NUM_CTX` à `6144` (mesuré : 3,39 Go avec qwen, 3,66 Go avec ministral) ou `4096` (3,10 Go avec qwen, 3,45 Go avec ministral) ;
 2. baissez `LLM_NUM_GPU`, par exemple à `20` : une partie du modèle passe alors sur le processeur ;
 3. laissez `LLM_NUM_GPU` vide : Ollama choisit lui-même, mais la réponse est environ 4 fois plus lente.
 

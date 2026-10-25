@@ -7,7 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
-DEFAULT_LLM_MODEL = "ministral-3:3b"
+DEFAULT_LLM_MODEL = "qwen3:4b-instruct"  # chosen in session 5 (eval/results_v1.md); before: ministral-3:3b
 DEFAULT_EMBEDDING_MODEL = "bge-m3"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -27,7 +27,9 @@ class Settings:
     llm_num_ctx: int = 8192  # context size in tokens: passages + question + answer
     llm_num_gpu: int | None = 99  # model layers on the GPU (99 = all); None lets Ollama decide
     llm_temperature: float = 0.1
-    llm_max_tokens: int = 700
+    llm_max_tokens: int = 1500  # room for the verbatim extracts, then the answer
+    search_mode: str = "vector"  # "vector" or "hybrid" (vectors + BM25, measured worse in session 5)
+    search_lexicon: str = "all"  # "off", "keywords" or "all": add legal wording to the question
 
 
 def optional_int(value: str | None) -> int | None:
@@ -47,5 +49,7 @@ def load_settings() -> Settings:
         llm_num_ctx=int(os.getenv("LLM_NUM_CTX", "8192")),
         llm_num_gpu=optional_int(os.getenv("LLM_NUM_GPU", "99")),
         llm_temperature=float(os.getenv("LLM_TEMPERATURE", "0.1")),
-        llm_max_tokens=int(os.getenv("LLM_MAX_TOKENS", "700")),
+        llm_max_tokens=int(os.getenv("LLM_MAX_TOKENS", "1500")),
+        search_mode=os.getenv("SEARCH_MODE", "vector").strip().lower(),
+        search_lexicon=os.getenv("SEARCH_LEXICON", "all").strip().lower(),
     )

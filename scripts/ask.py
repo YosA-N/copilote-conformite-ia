@@ -34,7 +34,10 @@ def main() -> int:
     print(f"Question : {question}\n")
     print("Réponse :")
     try:
-        answer = answer_question(question, INDEX_DIR, embedder, chat_model, k=args.k, on_text=write_now)
+        answer = answer_question(
+            question, INDEX_DIR, embedder, chat_model, k=args.k, on_text=write_now,
+            mode=settings.search_mode, lexicon=settings.search_lexicon,
+        )
     except (IndexNotReadyError, EmbeddingError, LLMError) as error:
         print(f"\n[ERREUR] {error}")
         return 1

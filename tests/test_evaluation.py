@@ -45,3 +45,19 @@ def test_questions_file_is_well_formed():
         assert question.expected, question.id
         assert all(REFERENCE.match(ref) for ref in question.expected + question.related), question.id
         assert question.coverage in {"complet", "partiel"}
+
+
+def test_measure_questions_v1_are_well_formed_and_new():
+    v1 = load_questions(EVAL_DIR / "questions_v1.jsonl")
+    earlier = load_questions(EVAL_DIR / "questions_v0.jsonl") + load_questions(EVAL_DIR / "questions_offtopic_v0.jsonl")
+
+    assert len(v1) == 20
+    assert not {q.id for q in v1} & {q.id for q in earlier}  # new ids
+    assert not {q.question for q in v1} & {q.question for q in earlier}  # new questions
+    for question in v1:
+        assert all(REFERENCE.match(ref) for ref in question.expected + question.related), question.id
+        if question.coverage == "hors corpus":
+            assert question.expected == [], question.id
+        else:
+            assert question.expected and question.coverage in {"complet", "partiel"}, question.id
+    assert sum(1 for question in v1 if not question.expected) == 3

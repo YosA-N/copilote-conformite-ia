@@ -18,6 +18,10 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
   - En cas d'erreur de mémoire : baisser `LLM_NUM_CTX`, puis `LLM_NUM_GPU`.
   - La lecture du prompt reste vers 160 tokens/s. Une question coûte environ 30 s : recherche sur CPU 2 à 4 s, lecture du prompt environ 12 s, rédaction environ 7 s, plus environ 5 s de chargement à la première question.
   - `bge-m3` (CPU, 0 Go de VRAM) et `ministral` (GPU) restent chargés ensemble après la première question.
+- **Mesures de `qwen3:4b-instruct`** (séance 5, Q4_K_M, 4 milliards de paramètres, 36 couches, pas de module de vision) :
+  - Avec toutes les couches forcées (`num_gpu=99`) : 3,10 Go (`num_ctx=4096`), 3,39 Go (6144), **3,68 Go (8192)** de VRAM. Il tient entièrement sur la carte graphique.
+  - Génération : 38 tokens/s avec 4096 ou 6144, 29 à 36 tokens/s avec 8192. Lecture du prompt vers 137 tokens/s.
+  - Environ 31 s par question avec le format « extraits puis réponse ».
 
 ## Choix techniques
 
@@ -32,10 +36,22 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
 - **Base vectorielle** : Chroma 1.5.9, persistante dans `data/index/`, distance cosinus.
   - Télémétrie désactivée et `embedding_function=None` : Chroma ne télécharge jamais son propre modèle.
   - `data/index/manifest.json` garde l'empreinte de `chunks.jsonl` et le nom du modèle : l'index n'est recalculé que s'ils changent. Sous Windows, on supprime la collection, jamais le dossier (fichiers verrouillés).
+- **Recherche retenue (séance 5)** : vecteurs `bge-m3` + **lexique** (`lexicon.py`, `SEARCH_LEXICON=all`), qui ajoute à la question le vocabulaire juridique des mots courants. Les entrées du lexique viennent de v0 seulement, jamais de v1.
+  - Recherche hybride vecteurs + BM25 (`lexical.py`, fusion RRF) testée puis rejetée : moins bonne sur v1 ; disponible avec `SEARCH_MODE=hybrid`.
 - **Évaluation** : `eval/questions_v0.jsonl` (10 questions types, articles attendus vérifiés dans le texte), mesurée par `evaluate_retrieval.py` (hit@1, hit@5, rang du premier article attendu). On mesure d'abord ; on ne retouche pas les questions pour améliorer le score.
+  - **Règle anti-triche** : `eval/questions_v1.jsonl` (20 questions, dont 3 hors sujet, figées au commit `c57bc66` avant toute amélioration) sert **seulement à mesurer**. On règle sur v0, jamais sur v1. On garde un changement seulement s'il améliore v0 **et** v1 (hit@5 qui ne baisse pas, au moins une mesure qui monte).
+  - Relecture humaine de référence : `eval/review_v0.md`. Mesures de la séance 5 : `eval/results_v1.md`.
+  - Les vecteurs des questions calculés sur le CPU varient très légèrement d'un lancement à l'autre : ±1 rang possible sur les passages aux scores presque égaux (q16). Répéter les mesures (`compare_retrieval.py --repeat 3`) avant de conclure.
   - Mesure de référence (séance 3, `bge-m3`, chunks de 4 000 caractères au plus) : **hit@1 = 6/10, hit@5 = 7/10**. Échecs : q03 durée de conservation (rang 6, réponse partielle dans le corpus), q04 mention d'information (rang 20), q10 IA générative au travail (art. 4 non trouvé dans les 20 premiers). Les sigles DPO et AIPD passent (rang 1). Pistes à étudier à la séance 5.
-- **Génération** : petit modèle via Ollama, derrière une **interface interchangeable** : changer de modèle = modifier une ligne dans `.env`. Par défaut : `ministral-3:3b`.
-  - Interface `ChatModel` dans `llm.py` (`/api/chat` en streaming). Réglages dans `.env` : `LLM_NUM_CTX`, `LLM_NUM_GPU`, `LLM_TEMPERATURE=0.1`, `LLM_MAX_TOKENS=700`.
+  - Séance 5 (meilleure configuration) : v0 **hit@1 = 7/10, hit@5 = 9/10** ; v1 **hit@1 = 10/17, hit@5 = 13/17** (départ v1 : 9/17 et 11–12/17). q10 (art. 4) et q21 (art. 32) restent hors des 5 premiers.
+- **Génération** : petit modèle via Ollama, derrière une **interface interchangeable** : changer de modèle = modifier une ligne dans `.env`. Par défaut : **`qwen3:4b-instruct`** (séance 5 ; avant : `ministral-3:3b`).
+  - Comparaison sur les mêmes passages (`compare_models.py`, 32 questions) : qwen recopie 79 extraits sur 83 mot pour mot (ministral : 45 sur 88), refuse les 5 questions hors sujet (ministral : 2), mais il est environ 5 s plus lent par réponse.
+  - Interface `ChatModel` dans `llm.py` (`/api/chat` en streaming). Réglages dans `.env` : `LLM_NUM_CTX`, `LLM_NUM_GPU`, `LLM_TEMPERATURE=0.1`, `LLM_MAX_TOKENS=1500` (place pour les extraits puis la réponse).
+  - **Génération fidèle (séance 5)** : le modèle écrit `EXTRAITS :` (phrases exactes des passages), puis `RÉPONSE :` à partir de ces phrases seulement.
+    - Le code vérifie chaque extrait **mot pour mot** dans le passage cité (tolérés : espaces, apostrophes, guillemets, majuscules, coupures « … » ou retour à la ligne ; 6 mots au moins).
+    - Sans extrait vérifié, la réponse devient « Les textes trouvés ne permettent pas de répondre à cette question. », sans alerte « aucune citation ». En streaming, la réponse n'apparaît qu'après la vérification de ses extraits.
+    - Limite connue : un extrait vérifié prouve que la phrase existe, pas qu'elle répond à la question (q10 dans `eval/results_v1.md`).
+    - Défauts connus de qwen : il met rarement des [n] dans la réponse, il dépasse parfois les quatre extraits et il a tutoyé une fois (q04).
   - Messages d'erreur clairs prévus : Ollama arrêté, modèle absent, mémoire insuffisante.
   - `rag.py` : prompt système en français et passages numérotés [1]…[5]. Si le prompt risque de dépasser le contexte, les derniers passages sont retirés et un avertissement est affiché.
   - Ce que fait le **code**, et non le modèle :
@@ -43,7 +59,7 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
     - sources construites à partir des métadonnées ;
     - réponse coupée signalée (`done_reason = "length"`) ;
     - avertissement « Information, pas un conseil juridique ».
-  - Réponses de référence non retouchées : `eval/answers_v0.md`, produites par `answer_questions.py` (10 questions et 2 hors sujet).
+  - Réponses de référence non retouchées : `eval/answers_v0.md` (séance 4) et `eval/answers_v1.md` (séance 5), produites par `answer_questions.py --version …` (10 questions et 2 hors sujet).
 - **Interface web** : Streamlit, plus tard.
 - **Dépendances** : on n'ajoute une bibliothèque qu'à l'étape qui en a besoin, avec une version épinglée (`==`) dans `requirements.txt`.
 
@@ -82,7 +98,9 @@ copy .env.example .env                                 # créer sa configuration
 .venv\Scripts\python scripts\search.py "question"      # afficher les 5 passages les plus proches
 .venv\Scripts\python scripts\evaluate_retrieval.py     # mesurer hit@1 et hit@5
 .venv\Scripts\python scripts\ask.py "question"         # poser une question (réponse + sources)
-.venv\Scripts\python scripts\answer_questions.py       # écrire eval/answers_v0.md (12 questions)
+.venv\Scripts\python scripts\answer_questions.py --version v1   # écrire eval/answers_v1.md (12 questions)
+.venv\Scripts\python scripts\compare_retrieval.py --repeat 3    # comparer les configurations de recherche (v0 et v1)
+.venv\Scripts\python scripts\compare_models.py ministral-3:3b qwen3:4b-instruct   # comparer les modèles sur les mêmes passages
 .venv\Scripts\python -m pytest                         # lancer les tests
 ```
 

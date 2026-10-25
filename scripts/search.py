@@ -40,7 +40,7 @@ def main() -> int:
     settings = load_settings()
     embedder = make_embedder(settings, settings.query_embedding_device)
     try:
-        results = search(question, INDEX_DIR, embedder, k=args.k)
+        results = search(question, INDEX_DIR, embedder, k=args.k, mode=settings.search_mode, lexicon=settings.search_lexicon)
     except (IndexNotReadyError, EmbeddingError) as error:
         print(f"[ERREUR] {error}")
         return 1
