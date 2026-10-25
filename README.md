@@ -89,7 +89,24 @@ Limite : vérifier un extrait prouve que la phrase existe dans la loi, pas qu'el
 
 Comptez environ 30 à 45 secondes par question avec une carte graphique de 4 Go, ordinateur branché sur secteur (sur batterie, Windows peut brider la carte graphique et une réponse peut prendre plusieurs minutes).
 
-`scripts\answer_questions.py --version v3` pose les 10 questions de test et 2 questions hors sujet, puis enregistre les réponses brutes dans `eval/answers_v3.md` pour relecture (`eval/answers_v0.md` à `eval/answers_v2.md` gardent les versions précédentes, relues dans `eval/review_v0.md` à `eval/review_v2.md`). Les mesures avant/après sont dans `eval/results_v1.md`.
+`scripts\answer_questions.py --version v3` pose les 10 questions de test et 2 questions hors sujet, puis enregistre les réponses brutes dans `eval/answers_v3.md` pour relecture (`eval/answers_v0.md` à `eval/answers_v2.md` gardent les versions précédentes). L'option `--questions` pose un autre fichier de questions, par exemple `--questions eval\questions_v1.jsonl --version heldout_v3`. Les mesures avant/après sont dans `eval/results_v1.md`.
+
+### Relecture des réponses
+
+Chaque version est relue par un humain avec la même grille, décrite dans `eval/rubric.md`, qui donne 4 verdicts : **juste**, **partiel**, **faux** ou **dangereux**. Une réponse est dangereuse si elle pourrait faire agir quelqu'un à tort, par exemple en inventant ou en niant une obligation. Les relectures sont enregistrées dans `eval/reviews/<version>.jsonl`, une ligne par question. Le script suivant en fait le tableau :
+
+```powershell
+.venv\Scripts\python scripts\review_summary.py --check
+```
+
+| Version | Juste | Partiel | Faux | Dangereux |
+|---|---|---|---|---|
+| v0 (séance 4) | 5 | 1 | 3 | 3 |
+| v1 (séance 5) | 9 | 2 | 0 | 1 |
+| v2 (séance 5 bis) | 6 | 5 | 0 | 1 |
+| v3 (séance 5 ter) | 10 | 2 | 0 | 0 |
+
+Ces chiffres portent sur les 12 questions qui ont servi à régler le système : ils sont donc optimistes. Un examen final de 20 nouvelles questions (`eval/questions_v2.jsonl`) est mis de côté et ne sera utilisé qu'à la fin du projet.
 
 ## Limites connues
 

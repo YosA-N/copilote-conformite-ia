@@ -41,7 +41,18 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
   - **Au plus 2 passages d'un même article** (séance 5 bis, `SEARCH_MAX_PER_ARTICLE=2`, `limit_per_article` dans `index.py`) : la recherche prend 4 × k candidats, puis écarte le 3e morceau d'un article et les suivants. Cause générale corrigée : un long article découpé en paragraphes occupait tout le top 5 (q10 : art. 50 ×2 et art. 26 ×3, art. 4 au rang 7).
 - **Évaluation** : `eval/questions_v0.jsonl` (10 questions types, articles attendus vérifiés dans le texte), mesurée par `evaluate_retrieval.py` (hit@1, hit@5, rang du premier article attendu). On mesure d'abord ; on ne retouche pas les questions pour améliorer le score.
   - **Règle anti-triche** : `eval/questions_v1.jsonl` (20 questions, dont 3 hors sujet, figées au commit `c57bc66` avant toute amélioration) sert **seulement à mesurer**. On règle sur v0, jamais sur v1. Un changement est gardé s'il ne fait baisser le hit@5 sur **aucun** jeu (v0, v1) et fait monter au moins une mesure (règle assouplie à la séance 5 bis, décision de l'auteur : avant, il fallait une amélioration sur les deux jeux).
-  - Relectures humaines de référence : `eval/review_v0.md`, `eval/review_v1.md` (v1 : 9 justes, 2 partielles q02 et q06, 1 fausse et dangereuse q10 ; **meilleure version relue**) et `eval/review_v2.md` (v2 : 6 justes, 5 partielles q01, q02, q06, q07, q10, 1 fausse q08). Mesures des séances 5, 5 bis et 5 ter : `eval/results_v1.md`.
+  - Relectures humaines de référence : `eval/review_v0.md`, `eval/review_v1.md` (v1 : 9 justes, 2 partielles q02 et q06, 1 fausse et dangereuse q10) et `eval/review_v2.md` (v2 : 6 justes, 5 partielles q01, q02, q06, q07, q10, 1 fausse q08). Mesures des séances 5, 5 bis et 5 ter : `eval/results_v1.md`.
+  - **Grille de relecture (séance 6)** : `eval/rubric.md`.
+    - 4 verdicts : juste, partiel, faux, dangereux (une erreur qui pourrait faire agir à tort : inventer ou nier une obligation, une durée, une interdiction).
+    - Cas limites validés par l'auteur : en cas de doute, le plus sévère ; hors sujet traité = faux ; refus alors que le corpus répond = faux ; réponse coupée = partiel ; on juge la réponse affichée, pas les alertes.
+    - Relectures structurées dans `eval/reviews/<version>.jsonl` (`id`, `verdict`, `comment`), comptées par `scripts/review_summary.py` (option `--check` : chaque relecture couvre exactement les questions de `eval/answers_<version>.md`). Les `review_v*.md` restent pour le détail.
+    - Reclassement selon la grille, décidé par l'auteur : v0 q01 (obligation inventée) et v2 q08 (exception inversée) deviennent « dangereux ».
+    - Verdicts (juste / partiel / faux / dangereux) : v0 5/1/3/3 ; v1 9/2/0/1 ; v2 6/5/0/1 ; **v3 10/2/0/0** (meilleure version relue).
+  - **Examen final (séance 6)** : `eval/questions_v2.jsonl`, 20 questions (12 RGPD, 5 AI Act, 3 hors sujet), figées au commit `65ee0c4` avant tout autre changement de la séance 6.
+    - Articles attendus vérifiés en lisant le corpus, jamais avec la recherche ni le modèle.
+    - **Ni lues ni utilisées avant la toute fin du projet** : aucune réponse générée, aucune mesure ; seul un test de format les ouvre.
+    - Écrites par Claude, qui connaît les points faibles du système (risque de biais). L'auteur ajoutera à la fin 5 questions à lui dans `eval/questions_author.jsonl` ; `answer_questions.py --questions` et `review_summary.py --check` acceptent ce fichier.
+  - **Réponses de la v3 aux 20 questions v1** : `eval/answers_heldout_v3.md` (séance 6, partie 1, à relire par l'auteur dans `eval/reviews/heldout_v3.jsonl`), produites par `answer_questions.py --questions eval\questions_v1.jsonl --version heldout_v3`.
   - Les vecteurs des questions calculés sur le CPU varient très légèrement d'un lancement à l'autre : ±1 rang possible sur les passages aux scores presque égaux (q16). Répéter les mesures (`compare_retrieval.py --repeat 3`) avant de conclure.
   - Mesure de référence (séance 3, `bge-m3`, chunks de 4 000 caractères au plus) : **hit@1 = 6/10, hit@5 = 7/10**. Échecs : q03 durée de conservation (rang 6, réponse partielle dans le corpus), q04 mention d'information (rang 20), q10 IA générative au travail (art. 4 non trouvé dans les 20 premiers). Les sigles DPO et AIPD passent (rang 1). Pistes à étudier à la séance 5.
   - Séance 5 (meilleure configuration) : v0 **hit@1 = 7/10, hit@5 = 9/10** ; v1 **hit@1 = 10/17, hit@5 = 13/17** (départ v1 : 9/17 et 11–12/17). q10 (art. 4) et q21 (art. 32) restent hors des 5 premiers.
@@ -99,7 +110,7 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
     - sources construites à partir des métadonnées ;
     - réponse coupée signalée (`done_reason = "length"`) ;
     - avertissement « Information, pas un conseil juridique ».
-  - Réponses de référence non retouchées : `eval/answers_v0.md` (séance 4), `eval/answers_v1.md` (séance 5), `eval/answers_v2.md` (séance 5 bis) et `eval/answers_v3.md` (séance 5 ter, à relire), produites par `answer_questions.py --version …` (10 questions et 2 hors sujet).
+  - Réponses de référence non retouchées : `eval/answers_v0.md` (séance 4), `eval/answers_v1.md` (séance 5), `eval/answers_v2.md` (séance 5 bis) et `eval/answers_v3.md` (séance 5 ter, relue : `eval/reviews/v3.jsonl`), produites par `answer_questions.py --version …` (10 questions et 2 hors sujet).
 - **Interface web** : Streamlit, plus tard.
 - **Dépendances** : on n'ajoute une bibliothèque qu'à l'étape qui en a besoin, avec une version épinglée (`==`) dans `requirements.txt`.
 
@@ -139,6 +150,8 @@ copy .env.example .env                                 # créer sa configuration
 .venv\Scripts\python scripts\evaluate_retrieval.py     # mesurer hit@1 et hit@5
 .venv\Scripts\python scripts\ask.py "question"         # poser une question (réponse + sources)
 .venv\Scripts\python scripts\answer_questions.py --version v3   # écrire eval/answers_v3.md (12 questions)
+.venv\Scripts\python scripts\answer_questions.py --questions eval\questions_v1.jsonl --version heldout_v3   # poser un autre fichier de questions
+.venv\Scripts\python scripts\review_summary.py --check        # tableau des verdicts des relectures (eval\reviews\*.jsonl)
 .venv\Scripts\python scripts\compare_retrieval.py --repeat 3    # comparer les configurations de recherche (v0 et v1)
 .venv\Scripts\python scripts\compare_models.py ministral-3:3b qwen3:4b-instruct   # comparer les modèles sur les mêmes passages (option --prompt-file : comparer un autre prompt)
 .venv\Scripts\python -m pytest                         # lancer les tests
