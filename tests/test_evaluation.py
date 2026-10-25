@@ -1,9 +1,21 @@
-"""Offline tests for the retrieval measures and for the file of test questions."""
+"""Offline tests for the retrieval measures, the files of test questions and the human reviews."""
 
 import re
 
+import pytest
+
 from compliance_copilot.config import EVAL_DIR
-from compliance_copilot.evaluation import describe_reference, first_hit_rank, hit_at_k, load_questions, matches
+from compliance_copilot.evaluation import (
+    ReviewError,
+    answered_question_ids,
+    describe_reference,
+    first_hit_rank,
+    hit_at_k,
+    load_questions,
+    load_reviews,
+    matches,
+    verdict_counts,
+)
 
 REFERENCE = re.compile(r"^(gdpr|ai_act):(art_\d+[a-z]?|anx_[IVXLC]+)(:[\w-]+)*$")
 
@@ -61,3 +73,89 @@ def test_measure_questions_v1_are_well_formed_and_new():
         else:
             assert question.expected and question.coverage in {"complet", "partiel"}, question.id
     assert sum(1 for question in v1 if not question.expected) == 3
+
+
+def check_question_format(questions):
+    for question in questions:
+        assert question.question.strip(), question.id
+        assert all(REFERENCE.match(ref) for ref in question.expected + question.related), question.id
+        if question.coverage == "hors corpus":
+            assert question.expected == [], question.id
+        else:
+            assert question.expected and question.coverage in {"complet", "partiel"}, question.id
+
+
+def test_final_exam_questions_v2_are_well_formed_and_new():
+    # format only: these questions are frozen and must not be used to tune anything before the end of the project
+    v2 = load_questions(EVAL_DIR / "questions_v2.jsonl")
+    earlier = [q for name in ("questions_v0.jsonl", "questions_offtopic_v0.jsonl", "questions_v1.jsonl") for q in load_questions(EVAL_DIR / name)]
+
+    assert len(v2) == 20 and len({q.id for q in v2}) == 20
+    assert not {q.id for q in v2} & {q.id for q in earlier}
+    assert not {q.question for q in v2} & {q.question for q in earlier}
+    assert sum(1 for q in v2 if not q.expected) == 3
+    check_question_format(v2)
+
+
+def test_author_questions_are_well_formed_if_present():
+    path = EVAL_DIR / "questions_author.jsonl"
+    if not path.exists():
+        pytest.skip("eval/questions_author.jsonl n'existe pas encore (ajouté par l'auteur à la fin du projet)")
+    others = [q for other in EVAL_DIR.glob("questions_*.jsonl") if other != path for q in load_questions(other)]
+    author = load_questions(path)
+
+    assert len({q.id for q in author}) == len(author)
+    assert not {q.id for q in author} & {q.id for q in others}
+    check_question_format(author)
+
+
+# ---------------------------------------------------------------- human reviews (eval/rubric.md)
+
+# Totals of the author's reviews (eval/review_v*.md, then the review of v3), with the two
+# reclassifications decided at session 6: v0 q01 and v2 q08 become "dangereux".
+AUTHOR_TOTALS = {
+    "v0": {"juste": 5, "partiel": 1, "faux": 3, "dangereux": 3},
+    "v1": {"juste": 9, "partiel": 2, "faux": 0, "dangereux": 1},
+    "v2": {"juste": 6, "partiel": 5, "faux": 0, "dangereux": 1},
+    "v3": {"juste": 10, "partiel": 2, "faux": 0, "dangereux": 0},
+}
+
+
+def test_review_files_follow_the_rubric_and_cover_the_answered_questions():
+    paths = sorted((EVAL_DIR / "reviews").glob("*.jsonl"))
+    assert paths
+
+    for path in paths:
+        reviews = load_reviews(path)  # raises ReviewError if a verdict, an id or a comment is wrong
+        answers = EVAL_DIR / f"answers_{path.stem}.md"
+        assert answers.exists(), path.name
+        assert sorted(r.id for r in reviews) == sorted(answered_question_ids(answers)), path.name
+
+
+@pytest.mark.parametrize("version", AUTHOR_TOTALS)
+def test_converted_reviews_keep_the_author_verdicts(version):
+    assert verdict_counts(load_reviews(EVAL_DIR / "reviews" / f"{version}.jsonl")) == AUTHOR_TOTALS[version]
+
+
+@pytest.mark.parametrize(
+    ("lines", "message"),
+    [
+        (['{"id": "q01", "verdict": "bof", "comment": "?"}'], "verdict inconnu"),
+        (['{"id": "q01", "verdict": "juste"}', '{"id": "q01", "verdict": "juste"}'], "relue deux fois"),
+        (['{"id": "q01", "verdict": "faux", "comment": " "}'], "commentaire est obligatoire"),
+        (['{"id": "q01", "verdict": "juste", "note": "?"}'], "format invalide"),
+    ],
+)
+def test_invalid_reviews_are_rejected(tmp_path, lines, message):
+    path = tmp_path / "v9.jsonl"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    with pytest.raises(ReviewError, match=message):
+        load_reviews(path)
+
+
+def test_answered_question_ids_reads_the_titles_of_an_answers_file(tmp_path):
+    path = tmp_path / "answers_v9.md"
+    path.write_text("# Réponses\n\n## q01 — Dois-je désigner un DPO ?\n\ntexte\n\n## h01 — Quel est le taux de TVA ?\n", encoding="utf-8")
+
+    assert answered_question_ids(path) == ["q01", "h01"]

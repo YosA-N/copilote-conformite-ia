@@ -5,6 +5,7 @@ The same pipeline as scripts/ask.py is used. Run scripts/build_index.py first.
 
 Usage, from the repository root:
     .venv\\Scripts\\python scripts\\answer_questions.py [--version v1]
+    .venv\\Scripts\\python scripts\\answer_questions.py --questions eval\\questions_v1.jsonl --version heldout_v3
 """
 
 import argparse
@@ -12,6 +13,7 @@ import json
 import sys
 import urllib.request
 from datetime import datetime
+from pathlib import Path
 
 from compliance_copilot.config import EVAL_DIR, INDEX_DIR, load_settings
 from compliance_copilot.embeddings import EmbeddingError, make_embedder
@@ -21,7 +23,7 @@ from compliance_copilot.llm import LLMError, make_chat_model
 from compliance_copilot.rag import RagAnswer, answer_question, render_footer
 from compliance_copilot.sources import SOURCES
 
-QUESTION_FILES = ["questions_v0.jsonl", "questions_offtopic_v0.jsonl"]
+QUESTION_FILES = [EVAL_DIR / "questions_v0.jsonl", EVAL_DIR / "questions_offtopic_v0.jsonl"]
 WARNING = (
     "> ⚠️ **Attention : certaines réponses de ce fichier sont fausses.** Ce sont les réponses brutes d'une version "
     "expérimentale du copilote, conservées telles quelles pour mesurer ses erreurs. Ne les utilisez pas comme "
@@ -85,13 +87,16 @@ def section(question, answer: RagAnswer) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Écrit les réponses du copilote aux questions de test.")
     parser.add_argument("--version", default="v1", help="suffixe du fichier écrit : eval/answers_<version>.md")
+    parser.add_argument("--questions", type=Path, nargs="+", default=QUESTION_FILES,
+                        help="fichiers de questions à poser (par défaut : questions v0 et hors sujet v0)")
     args = parser.parse_args()
     output = EVAL_DIR / f"answers_{args.version}.md"
 
     settings = load_settings()
     embedder = make_embedder(settings, settings.query_embedding_device)
     chat_model = make_chat_model(settings)
-    questions = [question for name in QUESTION_FILES for question in load_questions(EVAL_DIR / name)]
+    question_sets = [(path, load_questions(path)) for path in args.questions]
+    questions = [question for _, loaded in question_sets for question in loaded]
 
     sections, summary = [], []
     for question in questions:
@@ -136,7 +141,11 @@ def main() -> int:
         f"lexique « {settings.search_lexicon} », 5 passages par question, "
         + (f"{settings.search_max_per_article} au plus par article" if settings.search_max_per_article else "sans limite par article"),
         f"- Corpus : versions consolidées {versions}",
-        "- Questions : `eval/questions_v0.jsonl` (10) et `eval/questions_offtopic_v0.jsonl` (2, hors sujet)",
+        "- Questions : " + ", ".join(
+            f"`eval/{path.name}` ({sum(1 for q in loaded if q.expected)}"
+            + (f" + {sum(1 for q in loaded if not q.expected)} hors sujet" if any(not q.expected for q in loaded) else "") + ")"
+            for path, loaded in question_sets
+        ),
         "",
         "| # | Question | Extraits vérifiés | Refus | Alertes du code | Temps total |",
         "|---|---|---|---|---|---|",

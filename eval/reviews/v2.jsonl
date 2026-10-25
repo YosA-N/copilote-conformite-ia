@@ -1,0 +1,12 @@
+{"id": "q01", "verdict": "partiel", "comment": "Ne donne plus qu'un des 3 cas obligatoires de l'art. 37, § 1."}
+{"id": "q02", "verdict": "partiel", "comment": "Oublie la condition « non occasionnel » de l'exception de l'art. 30, § 5."}
+{"id": "q03", "verdict": "juste", "comment": ""}
+{"id": "q04", "verdict": "juste", "comment": ""}
+{"id": "q05", "verdict": "juste", "comment": ""}
+{"id": "q06", "verdict": "partiel", "comment": "Oublie toujours l'information des personnes en cas de risque élevé (art. 34)."}
+{"id": "q07", "verdict": "partiel", "comment": "Mélange l'AIPD du RGPD (art. 35) avec l'analyse d'impact sur les droits fondamentaux de l'AI Act (art. 27), deux obligations différentes."}
+{"id": "q08", "verdict": "dangereux", "comment": "L'exception est inversée (« sauf si cela NE ressort PAS clairement ») alors que l'art. 50, § 1 dit « sauf si cela ressort clairement » : reformuler une exception a inversé son sens. Reclassé de « faux » à « dangereux » à la séance 6, selon la grille : la personne pourrait ne pas informer ses clients alors que c'est obligatoire."}
+{"id": "q09", "verdict": "juste", "comment": "Faute de frappe « Cependi »."}
+{"id": "q10", "verdict": "partiel", "comment": "L'art. 4 est bien cité, mais l'obligation d'informer les personnes qui interagissent avec une IA (art. 50, § 1) vise le fournisseur, pas l'organisation qui utilise l'outil."}
+{"id": "h01", "verdict": "juste", "comment": "Question hors sujet bien refusée."}
+{"id": "h02", "verdict": "juste", "comment": "Question hors sujet bien refusée."}

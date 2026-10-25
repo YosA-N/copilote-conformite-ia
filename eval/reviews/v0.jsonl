@@ -1,0 +1,12 @@
+{"id": "q01", "verdict": "dangereux", "comment": "Dit « oui, vous devez » et lit l'art. 37, § 4 comme une obligation pour les associations, alors que c'est une possibilité. Reclassé de « partiel » à « dangereux » à la séance 6, selon la grille : invente une obligation pour les associations."}
+{"id": "q02", "verdict": "partiel", "comment": "Formule mal l'exception pour les structures de moins de 250 salariés (art. 30, § 5)."}
+{"id": "q03", "verdict": "dangereux", "comment": "Invente « 10 ans maximum » à partir de l'art. 18 de l'AI Act, qui concerne la conservation de la documentation des systèmes d'IA. Le RGPD ne fixe aucune durée."}
+{"id": "q04", "verdict": "faux", "comment": "Hors sujet ; le bon article (RGPD art. 13) n'a pas été trouvé par la recherche."}
+{"id": "q05", "verdict": "faux", "comment": "Ignore le bon passage (art. 12, § 3 : un mois), pourtant fourni au modèle."}
+{"id": "q06", "verdict": "juste", "comment": ""}
+{"id": "q07", "verdict": "juste", "comment": ""}
+{"id": "q08", "verdict": "juste", "comment": ""}
+{"id": "q09", "verdict": "dangereux", "comment": "Répond « vous ne pouvez pas trier des CV avec une IA ». C'est faux : c'est permis, mais classé à haut risque (AI Act, annexe III, point 4), avec des obligations pour le déployeur (art. 26)."}
+{"id": "q10", "verdict": "faux", "comment": "Hors sujet ; le bon article (AI Act art. 4) n'a pas été trouvé par la recherche."}
+{"id": "h01", "verdict": "juste", "comment": "Question hors sujet bien refusée."}
+{"id": "h02", "verdict": "juste", "comment": "Question hors sujet bien refusée."}
