@@ -8,7 +8,7 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
 
 ## Machine de l'auteur
 
-- Windows 11, Python 3.13.2, Git 2.48, Ollama 0.40.10 (mis à jour automatiquement par Ollama pendant la séance 4 ; avant : 0.40.7)
+- Windows 11, Python 3.13.2, Git 2.48, Ollama 0.40.11 (mis à jour automatiquement par Ollama : 0.40.7 → 0.40.10 pendant la séance 4, → 0.40.11 avant la séance 5 bis)
 - 16 Go de RAM, NVIDIA GTX 1650 avec **4 Go de VRAM** → le modèle de génération doit peser au plus ~3 Go (quantifié Q4), contexte limité à ~8K tokens.
 - **VRAM** : `bge-m3` (1,2 Go) + `ministral-3:3b` (3,0 Go) dépassent ensemble les 4 Go. Mesuré (séance 3) : sur la carte graphique, `bge-m3` occupe 0,69 Go et traite environ 300 tokens/s ; sur le CPU (option Ollama `num_gpu=0`), il est presque aussi rapide, avec des vecteurs identiques à 0,9999 près. Les questions passent donc par le CPU (`QUERY_EMBEDDING_DEVICE=cpu`) pour laisser la carte graphique au modèle de génération.
 - **Mesures de `ministral-3:3b`** (séance 4, Q4_K_M, 3,8 milliards de paramètres, 26 couches, module de vision inclus) :
@@ -38,12 +38,16 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
   - `data/index/manifest.json` garde l'empreinte de `chunks.jsonl` et le nom du modèle : l'index n'est recalculé que s'ils changent. Sous Windows, on supprime la collection, jamais le dossier (fichiers verrouillés).
 - **Recherche retenue (séance 5)** : vecteurs `bge-m3` + **lexique** (`lexicon.py`, `SEARCH_LEXICON=all`), qui ajoute à la question le vocabulaire juridique des mots courants. Les entrées du lexique viennent de v0 seulement, jamais de v1.
   - Recherche hybride vecteurs + BM25 (`lexical.py`, fusion RRF) testée puis rejetée : moins bonne sur v1 ; disponible avec `SEARCH_MODE=hybrid`.
+  - **Au plus 2 passages d'un même article** (séance 5 bis, `SEARCH_MAX_PER_ARTICLE=2`, `limit_per_article` dans `index.py`) : la recherche prend 4 × k candidats, puis écarte le 3e morceau d'un article et les suivants. Cause générale corrigée : un long article découpé en paragraphes occupait tout le top 5 (q10 : art. 50 ×2 et art. 26 ×3, art. 4 au rang 7).
 - **Évaluation** : `eval/questions_v0.jsonl` (10 questions types, articles attendus vérifiés dans le texte), mesurée par `evaluate_retrieval.py` (hit@1, hit@5, rang du premier article attendu). On mesure d'abord ; on ne retouche pas les questions pour améliorer le score.
-  - **Règle anti-triche** : `eval/questions_v1.jsonl` (20 questions, dont 3 hors sujet, figées au commit `c57bc66` avant toute amélioration) sert **seulement à mesurer**. On règle sur v0, jamais sur v1. On garde un changement seulement s'il améliore v0 **et** v1 (hit@5 qui ne baisse pas, au moins une mesure qui monte).
-  - Relecture humaine de référence : `eval/review_v0.md`. Mesures de la séance 5 : `eval/results_v1.md`.
+  - **Règle anti-triche** : `eval/questions_v1.jsonl` (20 questions, dont 3 hors sujet, figées au commit `c57bc66` avant toute amélioration) sert **seulement à mesurer**. On règle sur v0, jamais sur v1. Un changement est gardé s'il ne fait baisser le hit@5 sur **aucun** jeu (v0, v1) et fait monter au moins une mesure (règle assouplie à la séance 5 bis, décision de l'auteur : avant, il fallait une amélioration sur les deux jeux).
+  - Relectures humaines de référence : `eval/review_v0.md` et `eval/review_v1.md` (séance 5 bis : 9 justes, 2 partielles q02 et q06, 1 fausse et dangereuse q10). Mesures des séances 5 et 5 bis : `eval/results_v1.md`.
   - Les vecteurs des questions calculés sur le CPU varient très légèrement d'un lancement à l'autre : ±1 rang possible sur les passages aux scores presque égaux (q16). Répéter les mesures (`compare_retrieval.py --repeat 3`) avant de conclure.
   - Mesure de référence (séance 3, `bge-m3`, chunks de 4 000 caractères au plus) : **hit@1 = 6/10, hit@5 = 7/10**. Échecs : q03 durée de conservation (rang 6, réponse partielle dans le corpus), q04 mention d'information (rang 20), q10 IA générative au travail (art. 4 non trouvé dans les 20 premiers). Les sigles DPO et AIPD passent (rang 1). Pistes à étudier à la séance 5.
   - Séance 5 (meilleure configuration) : v0 **hit@1 = 7/10, hit@5 = 9/10** ; v1 **hit@1 = 10/17, hit@5 = 13/17** (départ v1 : 9/17 et 11–12/17). q10 (art. 4) et q21 (art. 32) restent hors des 5 premiers.
+  - Séance 5 bis (+ 2 passages par article au plus, 3 mesures identiques) : v0 **hit@1 = 7/10, hit@5 = 10/10** (q10 au rang 5) ; v1 inchangé, 10/17 et 13/17. Effet de bord : q07 perd des paragraphes de l'art. 35 au profit de l'art. 27 de l'AI Act, et la réponse v2 confond les deux analyses d'impact (le hit@5 ne le voit pas). À trancher.
+  - Génération séance 5 bis (`compare_models.py`, 32 questions) : réponses avec [n] 26/26 (avant 5/27), tutoiements 0 (avant 3), réponses avec alerte 7/32 (avant 23/32), extraits vérifiés 75/79, hors sujet refusés 5/5, 1 réponse coupée (q23). Vitesse 21 tokens/s ce jour-là, contre 36 : la machine était plus lente (test A/B, ancien prompt aussi à 25 tokens/s ; Ollama passé tout seul en 0.40.11) ; le nouveau prompt ajoute environ 290 tokens à lire.
+  - q10 v2 cite bien l'art. 4, mais présente l'obligation des fournisseurs (art. 50, § 1) comme celle de l'utilisateur, et finit par une phrase sans [n] ni extrait, non signalée. Autres points ouverts (q06, q08, q03) : `eval/results_v1.md`, section 7.6.
 - **Génération** : petit modèle via Ollama, derrière une **interface interchangeable** : changer de modèle = modifier une ligne dans `.env`. Par défaut : **`qwen3:4b-instruct`** (séance 5 ; avant : `ministral-3:3b`).
   - Comparaison sur les mêmes passages (`compare_models.py`, 32 questions) : qwen recopie 79 extraits sur 83 mot pour mot (ministral : 45 sur 88), refuse les 5 questions hors sujet (ministral : 2), mais il est environ 5 s plus lent par réponse.
   - Interface `ChatModel` dans `llm.py` (`/api/chat` en streaming). Réglages dans `.env` : `LLM_NUM_CTX`, `LLM_NUM_GPU`, `LLM_TEMPERATURE=0.1`, `LLM_MAX_TOKENS=1500` (place pour les extraits puis la réponse).
@@ -52,6 +56,12 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
     - Sans extrait vérifié, la réponse devient « Les textes trouvés ne permettent pas de répondre à cette question. », sans alerte « aucune citation ». En streaming, la réponse n'apparaît qu'après la vérification de ses extraits.
     - Limite connue : un extrait vérifié prouve que la phrase existe, pas qu'elle répond à la question (q10 dans `eval/results_v1.md`).
     - Défauts connus de qwen : il met rarement des [n] dans la réponse, il dépasse parfois les quatre extraits et il a tutoyé une fois (q04).
+  - **Prompt de la séance 5 bis** : écrit entièrement au « vous » (un prompt au « tu » fait tutoyer le modèle), avec un court exemple **fictif** du format et des [n], et des règles générales : ne jamais conclure « aucune obligation » faute de passage (« les passages trouvés ne traitent pas de ce point ») ; répondre à chaque partie de la question ; dire quand le texte ne donne qu'un principe (les règles concrètes peuvent venir du droit national ou de la CNIL) ; toujours vouvoyer.
+  - **Contrôles de la réponse par le code** (séance 5 bis, `rag.py`) : de simples signaux, sans compréhension du sens.
+    - Si la réponse n'a aucun [n] : alerte sur une phrase dont moins de **35 %** des racines de mots (`tokenize` de `lexical.py`) se retrouvent dans les extraits vérifiés (`SUPPORT_THRESHOLD`, choix de l'auteur ; 60 % alertait sur 19 réponses sur 27). Remplace l'ancienne alerte « aucune citation ».
+    - Toujours : alerte sur une affirmation d'absence ou d'impossibilité (« aucune obligation », « ne s'applique pas », « vous ne pouvez pas »…) si aucun extrait vérifié ne contient de négation. Effet connu : signale aussi des déductions justes (q01 « cela n'est pas obligatoire »).
+    - Toujours : alerte sur le tutoiement (tu, toi, te, t', ton, ta, tes).
+    - Tests de non-régression (`tests/test_rag.py`, `KNOWN_WRONG`) : les phrases fausses de q03 v0 (« 10 ans »), q09 v0 (« vous ne pouvez pas ») et q10 v1 (« aucune obligation… usage interne ») doivent rester signalées, avec leurs vrais extraits.
   - Messages d'erreur clairs prévus : Ollama arrêté, modèle absent, mémoire insuffisante.
   - `rag.py` : prompt système en français et passages numérotés [1]…[5]. Si le prompt risque de dépasser le contexte, les derniers passages sont retirés et un avertissement est affiché.
   - Ce que fait le **code**, et non le modèle :
@@ -59,7 +69,7 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
     - sources construites à partir des métadonnées ;
     - réponse coupée signalée (`done_reason = "length"`) ;
     - avertissement « Information, pas un conseil juridique ».
-  - Réponses de référence non retouchées : `eval/answers_v0.md` (séance 4) et `eval/answers_v1.md` (séance 5), produites par `answer_questions.py --version …` (10 questions et 2 hors sujet).
+  - Réponses de référence non retouchées : `eval/answers_v0.md` (séance 4), `eval/answers_v1.md` (séance 5) et `eval/answers_v2.md` (séance 5 bis, à relire), produites par `answer_questions.py --version …` (10 questions et 2 hors sujet).
 - **Interface web** : Streamlit, plus tard.
 - **Dépendances** : on n'ajoute une bibliothèque qu'à l'étape qui en a besoin, avec une version épinglée (`==`) dans `requirements.txt`.
 
@@ -98,7 +108,7 @@ copy .env.example .env                                 # créer sa configuration
 .venv\Scripts\python scripts\search.py "question"      # afficher les 5 passages les plus proches
 .venv\Scripts\python scripts\evaluate_retrieval.py     # mesurer hit@1 et hit@5
 .venv\Scripts\python scripts\ask.py "question"         # poser une question (réponse + sources)
-.venv\Scripts\python scripts\answer_questions.py --version v1   # écrire eval/answers_v1.md (12 questions)
+.venv\Scripts\python scripts\answer_questions.py --version v2   # écrire eval/answers_v2.md (12 questions)
 .venv\Scripts\python scripts\compare_retrieval.py --repeat 3    # comparer les configurations de recherche (v0 et v1)
 .venv\Scripts\python scripts\compare_models.py ministral-3:3b qwen3:4b-instruct   # comparer les modèles sur les mêmes passages
 .venv\Scripts\python -m pytest                         # lancer les tests

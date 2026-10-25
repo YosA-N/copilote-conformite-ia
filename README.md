@@ -56,6 +56,8 @@ Chaque chunk est transformé en vecteur (**embedding**) par le modèle `bge-m3`,
 
 Un petit **lexique** ajoute à la question le vocabulaire juridique des mots courants (« mention d'information » → « informations à fournir à la personne concernée », « DPO » → « délégué à la protection des données »…). Une recherche hybride par mots-clés (BM25) a aussi été testée : moins bonne sur les questions de mesure, elle n'est pas activée (`SEARCH_MODE=vector`, `SEARCH_LEXICON=all` dans `.env`).
 
+Un long article découpé en paragraphes pouvait occuper à lui seul les 5 passages et cacher un autre article utile. La recherche garde donc **au plus 2 passages d'un même article** (`SEARCH_MAX_PER_ARTICLE=2` dans `.env` ; vide = pas de limite).
+
 `evaluate_retrieval.py` pose les 10 questions de `eval/questions_v0.jsonl` et indique, pour chacune, le rang du premier article attendu, puis le **hit@1** (l'article attendu arrive en premier) et le **hit@5** (il est dans les 5 premiers passages).
 
 ## Poser une question
@@ -72,13 +74,17 @@ Le code, et non le modèle :
 - **remplace la réponse par « Les textes trouvés ne permettent pas de répondre à cette question. »** si aucun extrait n'est vérifié : une réponse sans appui dans les textes n'est jamais affichée, même en partie ;
 - affiche les extraits vérifiés, puis la liste des sources (règlement, article, titre, lien EUR-Lex, date de version), construite à partir des métadonnées ;
 - signale un extrait introuvable, une citation sans extrait vérifié, une citation vers un passage inexistant ou une réponse coupée par la limite de longueur ;
+- relit la réponse elle-même et signale :
+  - si elle ne cite aucun passage [n], une phrase dont moins de 35 % des mots se retrouvent dans les extraits vérifiés ;
+  - une phrase qui affirme une absence ou une impossibilité (« aucune obligation », « ne s'applique pas », « vous ne pouvez pas »…) alors qu'aucun extrait vérifié ne contient de négation ;
+  - le tutoiement (« tu », « ton »…) : le copilote doit toujours vouvoyer ;
 - ajoute l'avertissement « Information, pas un conseil juridique ».
 
-Limite : vérifier un extrait prouve que la phrase existe dans la loi, pas qu'elle répond bien à la question. La relecture humaine reste nécessaire.
+Limite : vérifier un extrait prouve que la phrase existe dans la loi, pas qu'elle répond bien à la question. Ces contrôles sont de simples signaux, sans compréhension du sens : ils peuvent laisser passer une erreur ou signaler une phrase juste. La relecture humaine reste nécessaire.
 
 Comptez environ 30 secondes par question avec une carte graphique de 4 Go.
 
-`scripts\answer_questions.py` pose les 10 questions de test et 2 questions hors sujet, puis enregistre les réponses brutes dans `eval/answers_v1.md` pour relecture (`eval/answers_v0.md` garde la version précédente). Les mesures avant/après sont dans `eval/results_v1.md`.
+`scripts\answer_questions.py --version v2` pose les 10 questions de test et 2 questions hors sujet, puis enregistre les réponses brutes dans `eval/answers_v2.md` pour relecture (`eval/answers_v0.md` et `eval/answers_v1.md` gardent les versions précédentes, relues dans `eval/review_v0.md` et `eval/review_v1.md`). Les mesures avant/après sont dans `eval/results_v1.md`.
 
 ## Mémoire de la carte graphique
 
