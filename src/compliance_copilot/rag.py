@@ -27,28 +27,30 @@ Répondez toujours en deux parties, dans cet ordre :
 
 EXTRAITS :
 - [numéro du passage] « phrase recopiée mot pour mot dans ce passage »
-(quatre extraits au plus, chacun sur sa ligne ; chaque extrait est une seule phrase ou un seul point a), b)…, jamais un paragraphe entier ; choisissez seulement ce qui répond à la question ; recopiez exactement, sans modifier ni résumer ; si vous sautez une partie d'une phrase, remplacez-la par « … »)
+(six extraits au plus, chacun sur sa ligne ; chaque extrait est une seule phrase ou un seul point a), b)…, jamais un paragraphe entier ; prenez d'abord un extrait de chaque passage qui répond à une partie de la question, avant un deuxième extrait d'un même passage ; recopiez exactement, sans modifier ni résumer ; si vous sautez une partie d'une phrase, remplacez-la par « … »)
 
 RÉPONSE :
 la réponse, écrite uniquement à partir des extraits ci-dessus, avec le numéro du passage entre crochets à la fin de chaque phrase qui s'appuie sur lui.
 
 Exemple de forme (contenu fictif) :
 EXTRAITS :
-- [2] « Le texte prévoit une obligation X pour l'organisme. »
-- [4] « Cette obligation ne s'applique pas dans le cas Y. »
+- [2] « Le responsable du traitement tient un document X, sauf si l'organisme compte moins de dix membres. »
+- [4] « Les fournisseurs informent l'autorité Z. »
 RÉPONSE :
-Oui, votre organisme doit respecter l'obligation X [2]. Elle ne s'applique pas dans le cas Y [4].
+Oui : en tant que responsable du traitement, vous devez tenir le document X (RGPD, article N), « sauf si l'organisme compte moins de dix membres » [2]. L'information de l'autorité Z (AI Act, article N) vise les fournisseurs, pas l'organisation qui utilise l'outil [4].
 
 Règles à respecter :
 1. Utilisez UNIQUEMENT les passages fournis, numérotés [1], [2]… N'utilisez aucune autre connaissance.
 2. Si aucun passage ne répond à la question, écrivez « EXTRAITS : aucun » puis « RÉPONSE : Les textes trouvés ne permettent pas de répondre à cette question. »
-3. N'inventez jamais de numéro d'article, de date, de durée ni de délai : reprenez uniquement ceux des extraits.
-4. Vérifiez que chaque extrait s'applique bien à la situation de la question : à qui s'adresse le texte (responsable du traitement, sous-traitant, fournisseur, déployeur…) et dans quel cas. Sinon, ne l'utilisez pas.
+3. N'inventez jamais de numéro d'article, de date, de durée ni de délai : reprenez uniquement ceux des passages et des extraits.
+4. Pour chaque obligation, nommez le règlement (RGPD ou AI Act), l'article et qui est visé (responsable du traitement, sous-traitant, fournisseur, déployeur…), comme dans le passage. N'attribuez pas à la personne une obligation qui vise un autre acteur. Ne réunissez jamais sous un même nom deux obligations de textes différents, même si elles se ressemblent.
 5. Distinguez ce qui est obligatoire (« doit ») de ce qui est permis (« peut »).
-6. Ne concluez jamais qu'il n'y a « aucune obligation » ou que quelque chose « ne s'applique pas » parce que les passages n'en parlent pas : écrivez plutôt « les passages trouvés ne traitent pas de ce point ». N'affirmez une absence d'obligation que si un extrait le dit explicitement.
-7. Répondez à chaque partie de la question. Quand les extraits ne donnent qu'un principe général (par exemple, une durée de conservation « pas plus longue que nécessaire »), dites-le et précisez que les règles concrètes (durées, montants, modalités) peuvent venir d'autres textes, comme le droit national ou les recommandations de la CNIL.
-8. Vouvoyez toujours la personne : jamais « tu », « toi », « ton », « ta », « tes ». Écrivez en français simple, pour une personne qui n'est pas juriste. Commencez par la réponse directe en une ou deux phrases, puis expliquez brièvement.
-9. Ne donnez aucun conseil qui ne figure pas dans les extraits."""
+6. Exceptions et conditions (« sauf si », « à moins que », « lorsque », « sous réserve de », « à condition que ») : recopiez-les mot pour mot entre « », telles qu'elles figurent dans un extrait. Ne les reformulez jamais : n'ajoutez ni ne retirez jamais un « ne … pas ».
+7. Quand un extrait annonce une liste de cas (a), b), c)…), recopiez chaque cas comme un extrait et reprenez-les tous dans la réponse. Si vous n'en citez qu'une partie, écrivez-le clairement : « parmi d'autres cas (liste complète à l'article N) ».
+8. Ne concluez jamais qu'il n'y a « aucune obligation » ou que quelque chose « ne s'applique pas » parce que les passages n'en parlent pas : écrivez plutôt « les passages trouvés ne traitent pas de ce point ». N'affirmez une absence d'obligation que si un extrait le dit explicitement.
+9. Répondez à chaque partie de la question (par exemple « qui », « quoi » et « quand »), avec chaque passage utile et pas seulement le premier. Quand les extraits ne donnent qu'un principe général (par exemple, une durée de conservation « pas plus longue que nécessaire »), dites-le et précisez que les règles concrètes (durées, montants, modalités) peuvent venir d'autres textes, comme le droit national ou les recommandations de la CNIL.
+10. Vouvoyez toujours la personne : jamais « tu », « toi », « ton », « ta », « tes ». Écrivez en français simple, pour une personne qui n'est pas juriste. Commencez par la réponse directe en une ou deux phrases, puis expliquez brièvement.
+11. Ne donnez aucun conseil qui ne figure pas dans les extraits."""
 
 REFUSAL = "Les textes trouvés ne permettent pas de répondre à cette question."
 DISCLAIMER = (
@@ -83,6 +85,34 @@ ABSENCE_CLAIM = re.compile(
 )
 NEGATION = re.compile(r"\b(?:ne|n['’])\b[^.;:]{0,80}?\b(?:pas|ni|aucune?)\b|\baucune?s?\b|\binterdite?s?\b|\bn['’]\w+ pas\b", re.IGNORECASE)
 ABOUT_PASSAGES = re.compile(r"\b(?:passages?|extraits?|textes? trouvés)\b", re.IGNORECASE)
+
+# Checks of exceptions, quotes, lists of cases and roles (session 5 ter). Measured on the saved v2
+# and session 5 answers before adoption: see eval/results_v1.md.
+EXCEPTION = re.compile(
+    r"\b(?:sauf (?:si|lorsque|lorsqu['’]|dans|en cas)|à moins qu(?:e|['’])|sous réserve d[eu]|à condition qu(?:e|['’])|à l['’]exception d[eu])",
+    re.IGNORECASE,
+)
+CONDITION = re.compile(EXCEPTION.pattern + r"|\blorsqu(?:e\b|['’])", re.IGNORECASE)
+CLAUSE_NEGATION = re.compile(
+    r"\b(?:ne|n['’])\s*(?:\w+['’]?\s+){0,4}?(?:pas|plus|jamais|aucune?|ni|point)\b|\baucune?\b|\bnon\b|\bsans\b",
+    re.IGNORECASE,
+)
+CLAUSE_WORDS = 12  # an exception is compared on its first 12 words…
+LONG_CLAUSE_WORDS = 24  # …with up to 24 words of the extract, so that a shorter wording is not taken for a flip
+QUOTE = re.compile(r"«\s*([^«»]+?)\s*»")
+MIN_QUOTE_WORDS = 3  # « déployeur » alone proves nothing
+EXCEPTION_SUPPORT = 0.6  # share of the words of an exception that must come from one extract
+LIST_ITEM = re.compile(r"^\s*(?:[a-z]|[ivx]+|\d+)\)\s")
+CASE_LIST_INTRO = re.compile(r"(?:\blorsqu|\bcas suivants|\bconditions? suivantes?|\bl['’]une (?:ou l['’]autre )?des|\bsi\b)[^:]*:\s*$", re.IGNORECASE)
+CONTENT_LIST_INTRO = re.compile(r"informations suivantes|éléments suivants|\bcomporte\b|\bcontient\b|\bcomprenant\b", re.IGNORECASE)
+CASE_COVERED = 0.4  # share of the first words of a case that the answer must repeat
+PARTIAL_LIST = re.compile(r"\bparmi\b|\bentre autres\b|liste complète|autres cas|\bl['’]un des\b|\bcertains des\b", re.IGNORECASE)
+OTHER_ACTOR = re.compile(r"\b(?:fournisseurs?|importateurs?|distributeurs?|mandataires?)\b", re.IGNORECASE)
+USER_ROLE = re.compile(r"déployeurs?|responsables? du traitement|sous-traitants?", re.IGNORECASE)
+REGULATION_NAMES = {
+    "RGPD": re.compile(r"\bRGPD\b|2016/679|protection des données", re.IGNORECASE),
+    "AI Act": re.compile(r"\bAI Act\b|2024/1689|intelligence artificielle|\bIA\b", re.IGNORECASE),
+}
 
 
 @dataclass
@@ -207,11 +237,11 @@ def _comparable(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip().casefold()
 
 
-def found_word_for_word(extract: str, passage_text: str) -> bool:
+def found_word_for_word(extract: str, passage_text: str, min_words: int = MIN_EXTRACT_WORDS) -> bool:
     """True if the extract appears in the passage; '…' may skip a part, the pieces staying in order."""
     pieces = [_comparable(piece).strip(" .,;:") for piece in ELLIPSIS.split(extract)]
     pieces = [piece for piece in pieces if piece]
-    if not pieces or sum(len(piece.split()) for piece in pieces) < MIN_EXTRACT_WORDS:
+    if not pieces or sum(len(piece.split()) for piece in pieces) < min_words:
         return False
     haystack, position = _comparable(passage_text), 0
     for piece in pieces:
@@ -319,11 +349,11 @@ def passage_label(metadata: dict) -> str:
     return f"{metadata['regulation']} — {metadata['regulation_ref']}, {kind} {metadata['number']}{part} : {metadata['title']}"
 
 
-def build_messages(question: str, passages: list[SearchResult]) -> list[dict]:
+def build_messages(question: str, passages: list[SearchResult], system_prompt: str = SYSTEM_PROMPT) -> list[dict]:
     """System prompt, then the numbered passages and the question."""
     numbered = "\n\n".join(f"[{number}] {passage.text}" for number, passage in enumerate(passages, start=1))
     user = f"Passages :\n\n{numbered}\n\nQuestion : {question}"
-    return [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user}]
+    return [{"role": "system", "content": system_prompt}, {"role": "user", "content": user}]
 
 
 def fit_passages(question: str, passages: list[SearchResult], chat_model: ChatModel) -> list[SearchResult]:
@@ -388,8 +418,153 @@ def uses_tu(text: str) -> bool:
     return bool(TUTOIEMENT.search(text))
 
 
+def _first_words(text: str, count: int) -> str:
+    return " ".join(text.split()[:count])
+
+
+def _clauses(text: str, marker: re.Pattern) -> list[tuple[str, str]]:
+    """(marker, what follows it up to the end of the sentence) for each "sauf si", "lorsque"…"""
+    return [(match.group(0), re.split(r"[.;!?]", text[match.end():], maxsplit=1)[0].strip()) for match in marker.finditer(text)]
+
+
+def flipped_negations(text: str, extracts: list[str]) -> list[str]:
+    """Conditions and exceptions of the answer that add or drop a « ne … pas » compared with the extract they repeat.
+
+    The closest extract clause must share at least half of the words; its negation is looked for on
+    24 words (one the answer would have added) or 12 words (one it would have dropped)."""
+    flips = []
+    for marker, clause in _clauses(text, CONDITION):
+        short = _first_words(clause, CLAUSE_WORDS)
+        words = set(tokenize(short))
+        if len(words) < 3:
+            continue
+        overlaps = [
+            (len(words & set(tokenize(_first_words(other, LONG_CLAUSE_WORDS)))) / len(words), other)
+            for extract in extracts
+            for _, other in _clauses(extract, CONDITION)
+        ]
+        overlap, closest = max(overlaps, default=(0.0, ""))
+        if overlap < 0.5:
+            continue
+        added = CLAUSE_NEGATION.search(short) and not CLAUSE_NEGATION.search(_first_words(closest, LONG_CLAUSE_WORDS))
+        dropped = not CLAUSE_NEGATION.search(short) and CLAUSE_NEGATION.search(_first_words(closest, CLAUSE_WORDS))
+        if added or dropped:
+            flips.append(f"{marker} {short}")
+    return flips
+
+
+def quotes_not_in_extracts(text: str, extracts: list[str]) -> list[str]:
+    """Texts written between « » in the answer that no verified extract contains."""
+    missing = []
+    for quote in QUOTE.findall(text):
+        if len(quote.split()) < MIN_QUOTE_WORDS or ABOUT_PASSAGES.search(quote) or PARTIAL_LIST.search(quote):
+            continue  # the wordings asked by the prompt are not quotes of the law
+        if not any(found_word_for_word(quote, extract, min_words=MIN_QUOTE_WORDS) for extract in extracts):
+            missing.append(quote)
+    return missing
+
+
+def unquoted_exceptions(text: str, extracts: list[str], already_flagged: list[str] = ()) -> list[str]:
+    """Exceptions ("sauf si"…) written outside « » with too few words of any verified extract."""
+    unquoted = []
+    for marker, clause in _clauses(QUOTE.sub(" ", text), EXCEPTION):
+        words = set(tokenize(_first_words(clause, CLAUSE_WORDS)))
+        if len(words) < 3 or f"{marker} {_first_words(clause, CLAUSE_WORDS)}" in already_flagged:
+            continue
+        if not any(len(words & set(tokenize(extract))) / len(words) >= EXCEPTION_SUPPORT for extract in extracts):
+            unquoted.append(f"{marker} {_first_words(clause, CLAUSE_WORDS)}")
+    return unquoted
+
+
+def _case_list(extract: Extract, passages: list[SearchResult]) -> tuple[int, list[str]] | None:
+    """(passage number, cases) if the extract announces a list of cases a), b)… or is one of them."""
+    lines = passages[extract.passage - 1].text.split("\n")
+    start = _comparable(_first_words(ELLIPSIS.split(extract.text)[0], 8))
+    index = next((i for i, line in enumerate(lines) if start and start in _comparable(line)), None)
+    if index is None:
+        return None
+    intro = index
+    while intro > 0 and LIST_ITEM.match(lines[intro]):
+        intro -= 1
+    announcement = re.split(r"(?<=\.)\s", lines[intro])[-1]
+    if not CASE_LIST_INTRO.search(announcement) or CONTENT_LIST_INTRO.search(announcement):
+        return None  # a list of contents (« les informations suivantes ») is not a list of cases
+    if intro == index and not ELLIPSIS.sub("", extract.text).rstrip(" .»").endswith(":"):
+        return None  # the extract is another sentence of the same paragraph
+    cases = []
+    for line in lines[intro + 1:]:
+        if not LIST_ITEM.match(line):
+            break
+        cases.append(line)
+    return (extract.passage, cases) if len(cases) >= 2 else None
+
+
+def incomplete_case_lists(text: str, extracts: list[Extract], passages: list[SearchResult]) -> list[tuple[int, int, int]]:
+    """(passage, cases repeated, cases listed) for the lists of cases the answer only partly repeats, without saying so."""
+    if PARTIAL_LIST.search(text):
+        return []
+    answer_words = set(tokenize(text))
+    incomplete = set()
+    for extract in extracts:
+        if not extract.verified or not extract.passage:
+            continue
+        found = _case_list(extract, passages)
+        if not found:
+            continue
+        number, cases = found
+        heads = [set(tokenize(case)[:15]) for case in cases]
+        repeated = sum(1 for head in heads if head and len(head & answer_words) / len(head) >= CASE_COVERED)
+        if repeated < len(cases):
+            incomplete.add((number, repeated, len(cases)))
+    return sorted(incomplete)
+
+
+def _sentences_with_citations(text: str) -> list[tuple[str, list[int]]]:
+    sentences = []
+    for part in re.split(r"(?<=[.!?])\s+|\n+", text):
+        numbers = [number for match in CITATION.finditer(part) for number in (_cited_numbers(match.group(1)) or [])]
+        sentence = re.sub(r"\s+([.,;:!?])", r"\1", re.sub(r"^[\s>*•-]+", "", CITATION.sub("", part))).strip()
+        if sentence:
+            sentences.append((sentence, numbers))
+    return sentences
+
+
+def other_actor_duties(text: str, extracts: list[Extract]) -> list[str]:
+    """Sentences that rely on an extract addressed to a provider, importer… without naming that actor."""
+    by_passage: dict[int, list[str]] = {}
+    for extract in extracts:
+        if extract.verified and extract.passage:
+            by_passage.setdefault(extract.passage, []).append(_first_words(extract.text, 6))
+    unnamed = []
+    for sentence, numbers in _sentences_with_citations(text):
+        subjects = [subject for number in numbers for subject in by_passage.get(number, [])]
+        if any(USER_ROLE.search(subject) for subject in subjects):
+            continue  # the extract also speaks to the deployer or the controller
+        if any(OTHER_ACTOR.search(subject) for subject in subjects) and not OTHER_ACTOR.search(sentence):
+            unnamed.append(sentence)
+    return unnamed
+
+
+def unnamed_regulations(text: str, extracts: list[Extract], passages: list[SearchResult]) -> list[str]:
+    """In an answer that relies on both the RGPD and the AI Act, sentences that do not say which one they use."""
+    regulations = {passages[extract.passage - 1].metadata["regulation"] for extract in extracts if extract.verified and extract.passage}
+    if len(regulations) < 2:
+        return []
+    unnamed = []
+    for sentence, numbers in _sentences_with_citations(text):
+        for number in numbers:
+            name = passages[number - 1].metadata["regulation"] if 1 <= number <= len(passages) else None
+            if name in REGULATION_NAMES and not REGULATION_NAMES[name].search(sentence) and sentence not in unnamed:
+                unnamed.append(sentence)
+    return unnamed
+
+
 def _short(sentence: str, length: int = 120) -> str:
     return sentence if len(sentence) <= length else sentence[:length].rsplit(" ", 1)[0] + " …"
+
+
+def _more(found: list) -> str:
+    return f" (et {len(found) - 1} autre(s))" if len(found) > 1 else ""
 
 
 # ---------------------------------------------------------------- answer
@@ -437,13 +612,46 @@ def _warnings(found: int, passages: list[SearchResult], chat_model: ChatModel, g
         # without [n], the answer must at least repeat the words of the verified extracts
         weak = unsupported_sentences(answer_text, verified_texts)
         if weak:
-            more = f" (et {len(weak) - 1} autre(s))" if len(weak) > 1 else ""
             warnings.append(
-                f"La réponse ne cite aucun passage et une phrase ne reprend pas les extraits vérifiés : « {_short(weak[0])} »{more}. "
+                f"La réponse ne cite aucun passage et une phrase ne reprend pas les extraits vérifiés : « {_short(weak[0])} »{_more(weak)}. "
                 "Vérifiez-la dans les textes."
             )
     for claim in unbacked_absence_claims(answer_text, verified_texts):
         warnings.append(f"La réponse affirme une absence ou une impossibilité qu'aucun extrait ne dit : « {_short(claim)} ». Vérifiez ce point.")
+    flips = flipped_negations(answer_text, verified_texts)
+    if flips:
+        warnings.append(
+            f"La réponse change le sens d'une condition ou d'une exception (négation ajoutée ou retirée par rapport à l'extrait) : "
+            f"« {_short(flips[0])} »{_more(flips)}. Vérifiez ce point."
+        )
+    missing = quotes_not_in_extracts(answer_text, verified_texts)
+    if missing:
+        warnings.append(f"La réponse met entre « » un texte introuvable dans les extraits vérifiés : « {_short(missing[0])} »{_more(missing)}.")
+    unquoted = unquoted_exceptions(answer_text, verified_texts, already_flagged=flips)
+    if unquoted:
+        warnings.append(
+            f"La réponse formule une exception qui ne reprend pas les extraits vérifiés : « {_short(unquoted[0])} »{_more(unquoted)}. "
+            "Vérifiez-la dans les textes."
+        )
+    lists = incomplete_case_lists(answer_text, extracts, passages)
+    if lists:
+        number, repeated, listed = lists[0]
+        warnings.append(
+            f"La réponse ne reprend que {repeated} des {listed} cas énumérés au passage [{number}], sans dire qu'elle n'en cite "
+            f"qu'une partie{_more(lists)}. Vérifiez la liste complète."
+        )
+    others = other_actor_duties(answer_text, extracts)
+    if others:
+        warnings.append(
+            f"La réponse s'appuie sur un extrait qui vise un fournisseur, un importateur ou un distributeur, sans nommer cet acteur : "
+            f"« {_short(others[0])} »{_more(others)}. Vérifiez qui est concerné."
+        )
+    unnamed = unnamed_regulations(answer_text, extracts, passages)
+    if unnamed:
+        warnings.append(
+            f"La réponse s'appuie sur le RGPD et l'AI Act sans dire de quel règlement vient chaque obligation : "
+            f"« {_short(unnamed[0])} »{_more(unnamed)}."
+        )
     if uses_tu(answer_text):
         warnings.append("La réponse tutoie la personne (« tu », « ton »…) alors que le copilote doit toujours vouvoyer.")
     return warnings
@@ -475,11 +683,12 @@ def answer_from_passages(
     on_text: Callable[[str], None] | None = None,
     search_seconds: float = 0.0,
     found: int | None = None,
+    system_prompt: str = SYSTEM_PROMPT,
 ) -> RagAnswer:
-    """Have the model answer from the given passages (also used to compare models on the same passages)."""
+    """Have the model answer from the given passages (also used to compare models or prompts on the same passages)."""
     stream = AnswerStream(on_text, passages) if on_text else None
     start = time.perf_counter()
-    generation = chat_model.generate(build_messages(question, passages), on_text=stream.feed if stream else None)
+    generation = chat_model.generate(build_messages(question, passages, system_prompt), on_text=stream.feed if stream else None)
     generation_seconds = time.perf_counter() - start
     if stream:
         stream.close()

@@ -3,23 +3,30 @@
 import pytest
 from conftest import FakeChatModel
 
-from compliance_copilot.index import search
+from compliance_copilot.index import SearchResult, search
 from compliance_copilot.rag import (
     DISCLAIMER,
     REFUSAL,
     SYSTEM_PROMPT,
     AnswerStream,
     CitationStream,
+    Extract,
     answer_from_passages,
     answer_question,
     build_messages,
     check_citations,
+    flipped_negations,
     found_word_for_word,
+    incomplete_case_lists,
     normalize_citations,
+    other_actor_duties,
     parse_extracts,
+    quotes_not_in_extracts,
     render_footer,
     support_ratio,
     unbacked_absence_claims,
+    unnamed_regulations,
+    unquoted_exceptions,
     unsupported_sentences,
     uses_tu,
 )
@@ -52,6 +59,11 @@ def test_prompt_gives_the_rules_and_numbers_the_passages_in_order(passages):
         "les passages trouvés ne traitent pas de ce point",  # no "aucune obligation" from silence
         "Répondez à chaque partie de la question",
         "Vouvoyez toujours",
+        "recopiez-les mot pour mot entre « »",  # exceptions and conditions are never reworded
+        "qui est visé",  # provider, deployer, controller…
+        "Ne réunissez jamais sous un même nom deux obligations de textes différents",
+        "reprenez-les tous dans la réponse",  # lists of cases a), b), c)…
+        "six extraits au plus",
     ):
         assert rule in SYSTEM_PROMPT
     assert not SYSTEM_PROMPT.startswith("Tu ")  # the prompt itself says "vous" to the model
@@ -305,6 +317,165 @@ def test_absence_claim_and_tutoiement_are_reported(passages):
 
     assert any("absence ou une impossibilité" in warning for warning in answer.warnings)
     assert any("tutoie" in warning for warning in answer.warnings)
+
+
+# ---------------------------------------------------------------- exceptions, quotes, lists and roles (session 5 ter)
+
+# Texts of the law, as they appear in the corpus
+AI_ACT_50_1 = (
+    "Les fournisseurs veillent à ce que les systèmes d’IA destinés à interagir directement avec des personnes physiques soient "
+    "conçus et développés de manière que les personnes physiques concernées soient informées qu’elles interagissent avec un "
+    "système d’IA, sauf si cela ressort clairement du point de vue d’une personne physique normalement informée et "
+    "raisonnablement attentive et avisée, compte tenu des circonstances et du contexte d’utilisation."
+)
+AI_ACT_4 = (
+    "Les fournisseurs et les déployeurs de systèmes d'IA prennent des mesures pour favoriser le développement de la maîtrise "
+    "de l'IA par leur personnel"
+)
+GDPR_30_5 = (
+    "Les obligations visées aux paragraphes 1 et 2 ne s'appliquent pas à une entreprise ou à une organisation comptant moins "
+    "de 250 employés, sauf si le traitement qu'elles effectuent est susceptible de comporter un risque pour les droits et des "
+    "libertés des personnes concernées, s'il n'est pas occasionnel ou s'il porte notamment sur les catégories particulières "
+    "de données visées à l'article 9, paragraphe 1, ou sur des données à caractère personnel relatives à des condamnations "
+    "pénales et à des infractions visées à l'article 10."
+)
+GDPR_37_1 = (
+    "RGPD — règlement (UE) 2016/679 — Article 37 : Désignation du délégué à la protection des données\n\n"
+    "1. Le responsable du traitement et le sous-traitant désignent en tout état de cause un délégué à la protection des données lorsque:\n"
+    "a) le traitement est effectué par une autorité publique ou un organisme public, à l'exception des juridictions agissant "
+    "dans l'exercice de leur fonction juridictionnelle;\n"
+    "b) les activités de base du responsable du traitement ou du sous-traitant consistent en des opérations de traitement qui, "
+    "du fait de leur nature, de leur portée et/ou de leurs finalités, exigent un suivi régulier et systématique à grande "
+    "échelle des personnes concernées; ou\n"
+    "c) les activités de base du responsable du traitement ou du sous-traitant consistent en un traitement à grande échelle "
+    "de catégories particulières de données visées à l’article 9 ou de données à caractère personnel relatives à des "
+    "condamnations pénales et à des infractions visées à l’article 10.\n"
+    "2. Un groupe d'entreprises peut désigner un seul délégué à la protection des données."
+)
+GDPR_30_1 = (
+    "RGPD — règlement (UE) 2016/679 — Article 30 : Registre des activités de traitement\n\n"
+    "1. Chaque responsable du traitement tient un registre des activités de traitement. Ce registre comporte toutes les informations suivantes:\n"
+    "a) le nom et les coordonnées du responsable du traitement;\n"
+    "b) les finalités du traitement;\n"
+    "c) une description des catégories de personnes concernées."
+)
+DPO_ANNOUNCEMENT = "Le responsable du traitement et le sous-traitant désignent en tout état de cause un délégué à la protection des données lorsque: …"
+
+
+def passage(text: str, regulation: str = "RGPD") -> SearchResult:
+    metadata = {
+        "regulation": regulation, "regulation_ref": "règlement de test", "unit_type": "article", "number": "1", "part": None,
+        "title": "Test", "source_url": "https://eur-lex.europa.eu/test", "version_date": "2026-07-27",
+    }
+    return SearchResult(rank=1, score=0.5, id="test", text=text, metadata=metadata)
+
+
+def verified(text: str, number: int = 1) -> Extract:
+    return Extract(number=number, text=text, verified=True, passage=number)
+
+
+# Non-regression: wrong answers really written by the copilot with the v2 prompt (eval/answers_v2.md and
+# the 32-question comparison of session 5 bis). The checks must keep flagging them.
+Q08_V2 = (
+    "Oui, votre chatbot doit dire aux clients qu’il est une IA [1], sauf si cela ne ressort pas clairement du point de vue "
+    "d’une personne physique normalement informée et raisonnablement attentive et avisée, compte tenu des circonstances et "
+    "du contexte d’utilisation."
+)
+Q01_V2 = (
+    "Oui, vous devez désigner un délégué à la protection des données [1], sauf si vous n'effectuez pas de traitement relevant "
+    "des cas précis mentionnés dans les points a), b) ou c) de ce paragraphe, ou si le droit de l'Union ou d'un État membre "
+    "ne vous oblige pas à le faire [1]."
+)
+Q10_V2 = (
+    "Vous devez informer les personnes concernées qu’elles interagissent avec un système d’IA, sauf si cela ressort clairement "
+    "du point de vue d’une personne physique normalement informée [1]."
+)
+Q07_V2 = (
+    "Enfin, une AIPD doit être effectuée en application de l'article 35, paragraphe 4, lorsque l'autorité de contrôle envisage "
+    "d'adopter une liste d'opérations de traitement concernées [2]."
+)
+Q02_V2 = (
+    "Cependant, cette obligation ne s’applique pas à une entreprise ou organisation comptant moins de 250 employés, sauf si le "
+    "traitement comporte un risque pour les droits et libertés des personnes concernées, s’il n’est pas occasionnel ou s’il "
+    "porte sur des catégories particulières de données ou des données relatives à des condamnations pénales [1]."
+)
+
+
+def test_q08_v2_inverted_exception_is_flagged():
+    flips = flipped_negations(Q08_V2, [AI_ACT_50_1])
+
+    assert len(flips) == 1 and flips[0].startswith("sauf si cela ne ressort pas clairement")
+
+
+def test_exception_repeated_with_the_same_meaning_is_not_flagged():
+    assert flipped_negations(Q02_V2, [GDPR_30_5]) == []  # a longer exception, but no negation added or dropped
+    assert flipped_negations(Q10_V2, [AI_ACT_50_1]) == []
+
+
+def test_q01_v2_list_of_cases_and_invented_exception_are_flagged():
+    passages = [passage(GDPR_37_1)]
+    extracts = [verified(DPO_ANNOUNCEMENT)]
+
+    assert incomplete_case_lists(Q01_V2, extracts, passages) == [(1, 0, 3)]
+    invented = unquoted_exceptions(Q01_V2, [DPO_ANNOUNCEMENT])
+    assert len(invented) == 1 and invented[0].startswith("sauf si vous n'effectuez pas de traitement")
+
+
+def test_list_of_cases_repeated_in_full_or_announced_as_partial_is_accepted():
+    passages = [passage(GDPR_37_1)]
+    extracts = [verified(DPO_ANNOUNCEMENT)]
+    full = (
+        "Vous devez désigner un délégué lorsque le traitement est effectué par une autorité publique ou un organisme public, "
+        "lorsque vos activités de base exigent un suivi régulier et systématique à grande échelle des personnes concernées, "
+        "ou lorsqu'elles consistent en un traitement à grande échelle de catégories particulières de données [1]."
+    )
+    partial = "Vous devez désigner un délégué, parmi d'autres cas, lorsque le traitement est effectué par une autorité publique [1]."
+
+    assert incomplete_case_lists(full, extracts, passages) == []
+    assert incomplete_case_lists(partial, extracts, passages) == []
+
+
+def test_list_of_contents_is_not_a_list_of_cases():
+    extracts = [verified("Ce registre comporte toutes les informations suivantes: …")]
+
+    assert incomplete_case_lists("Le registre indique les finalités du traitement [1].", extracts, [passage(GDPR_30_1)]) == []
+
+
+def test_q10_v2_provider_duty_presented_as_yours_is_flagged():
+    assert other_actor_duties(Q10_V2, [verified(AI_ACT_50_1)]) == [Q10_V2.replace(" [1]", "")]
+    # article 4 speaks to providers and deployers: the deployer may be told "vous devez"
+    assert other_actor_duties("Vous devez prendre des mesures pour favoriser la maîtrise de l'IA par votre personnel [1].", [verified(AI_ACT_4)]) == []
+    # naming the provider is enough
+    assert other_actor_duties("Les fournisseurs doivent informer les personnes qu'elles parlent à une IA [1].", [verified(AI_ACT_50_1)]) == []
+
+
+def test_q07_v2_sentence_without_its_regulation_is_flagged_in_a_mixed_answer():
+    passages = [passage(GDPR_37_1, "AI Act"), passage(GDPR_30_1, "RGPD")]  # only the metadata matter here
+    extracts = [verified(DPO_ANNOUNCEMENT, 1), verified("Ce registre comporte toutes les informations suivantes: …", 2)]
+
+    assert unnamed_regulations(Q07_V2, extracts, passages) == [Q07_V2.replace(" [2]", "")]
+    assert unnamed_regulations(Q07_V2, extracts[1:], passages) == []  # one regulation only: nothing to tell apart
+
+
+def test_quotes_must_come_from_the_verified_extracts():
+    exact = "Vous devez informer les personnes, « sauf si cela ressort clairement du point de vue d’une personne physique » [1]."
+    wrong = "Vous devez informer les personnes, « sauf si cela ne ressort pas clairement » [1]."
+
+    assert quotes_not_in_extracts(exact, [AI_ACT_50_1]) == []
+    assert unquoted_exceptions(exact, [AI_ACT_50_1]) == []  # an exception between « » is checked as a quote
+    assert quotes_not_in_extracts(wrong, [AI_ACT_50_1]) == ["sauf si cela ne ressort pas clairement"]
+    # the wordings asked by the prompt are not quotes of the law
+    assert quotes_not_in_extracts("Sur ce point, « les passages trouvés ne traitent pas de ce point ».", [AI_ACT_50_1]) == []
+
+
+def test_q08_v2_answer_gets_the_new_alerts():
+    reply = f"EXTRAITS :\n- [1] « {AI_ACT_50_1} »\n\nRÉPONSE :\n{Q08_V2}"
+
+    answer = answer_from_passages("Mon chatbot doit-il dire qu'il est une IA ?", [passage(AI_ACT_50_1, "AI Act")], FakeChatModel(reply=reply))
+
+    assert any("change le sens d'une condition ou d'une exception" in warning for warning in answer.warnings)
+    assert any("sans nommer cet acteur" in warning for warning in answer.warnings)
+    assert not any("formule une exception" in warning for warning in answer.warnings)  # the flip is reported once
 
 
 # ---------------------------------------------------------------- whole answer

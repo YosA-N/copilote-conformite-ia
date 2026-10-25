@@ -1,6 +1,6 @@
-# Résultats des séances 5 et 5 bis — avant / après
+# Résultats des séances 5, 5 bis et 5 ter — avant / après
 
-Séance 5 : sections 1 à 6. Séance 5 bis (corrections après la relecture `eval/review_v1.md`) : section 7, et colonne « séance 5 bis » de la section 5.
+Séance 5 : sections 1 à 6. Séance 5 bis (corrections après la relecture `eval/review_v1.md`) : section 7. Séance 5 ter (corrections après la relecture `eval/review_v2.md`) : section 8. Le tableau de la section 5 a une colonne par version.
 
 Toutes les mesures sont produites par les scripts du dépôt. Les questions `eval/questions_v1.jsonl` ont été écrites et commitées (`c57bc66`) **avant** toute amélioration : elles servent seulement à mesurer, on ne règle rien dessus. Les questions v0 servent, elles, à diagnostiquer et à régler.
 
@@ -146,23 +146,27 @@ Détail du 2e tour (état, extraits vérifiés / recopiés, « attendu » = au m
 
 Meilleure configuration : recherche par vecteurs `bge-m3` + lexique, 5 passages ; `qwen3:4b-instruct`, extraits vérifiés, 1 500 tokens au plus. Réponses brutes, non relues : `eval/answers_v1.md`.
 
-| Mesure | Avant (séance 4) | Après (séance 5) | Séance 5 bis |
-|---|---|---|---|
-| Recherche, v0 : hit@1 / hit@5 | 6/10 · 7/10 | 7/10 · 9/10 | 7/10 · **10/10** |
-| Recherche, v1 : hit@1 / hit@5 | 9/17 · 11–12/17 | 10/17 · 13/17 | 10/17 · 13/17 |
-| Extraits vérifiés mot pour mot, 12 questions (`answers_v1.md`, puis `answers_v2.md`) | non mesurable (pas d'extraits) | 21 / 23 | 39 / 40 |
-| Extraits vérifiés mot pour mot, 32 questions (comparaison des modèles) | — | 79 / 83 | 75 / 79 |
-| Réponses appuyées sur un extrait vérifié d'un article attendu (27 questions) | — | 22 / 27 | 23 / 27 |
-| Questions hors sujet refusées | h01 refusée (avec l'alerte « aucune citation »), h02 hors cadre expliqué par le modèle | 2/2 refus standard, sans alerte ; v1 : 3/3 | 2/2 ; v1 : 3/3 |
-| Réponses avec au moins une citation [n] (10 questions v0) | — | 2 / 10 | **10 / 10** |
-| Réponses avec au moins une citation [n] (32 questions, réponses données) | — | 5 / 27 | **26 / 26** |
-| Tutoiements (32 questions) | — | 3 | **0** |
-| Réponses avec au moins une alerte (12 questions) | — | 9 / 12 | **3 / 12** |
-| Réponses avec au moins une alerte (32 questions) | — | 23 / 32 (25 alertes) | **7 / 32 (10 alertes)** |
-| Réponses coupées (32 questions) | — | 0 | 1 (q23) |
-| Temps moyen par question (12 questions) | 18 s (`ministral-3:3b`, sans extraits) | 31 s (`qwen3:4b-instruct`, avec extraits) | 41 s (machine plus lente ce jour-là, voir section 7) |
+| Mesure | Avant (séance 4, v0) | Séance 5 (v1) | Séance 5 bis (v2) | Séance 5 ter (v3) |
+|---|---|---|---|---|
+| **Relecture humaine (12 questions)** | 5 justes, 2 partielles, 5 fausses | **9 justes**, 2 partielles, 1 fausse | 6 justes, 5 partielles, 1 fausse | à relire (`answers_v3.md`) |
+| Recherche, v0 : hit@1 / hit@5 | 6/10 · 7/10 | 7/10 · 9/10 | 7/10 · **10/10** | inchangée |
+| Recherche, v1 : hit@1 / hit@5 | 9/17 · 11–12/17 | 10/17 · 13/17 | 10/17 · 13/17 | inchangée |
+| Extraits vérifiés mot pour mot, 12 questions (`answers_v1.md`, `answers_v2.md`, `answers_v3.md`) | non mesurable (pas d'extraits) | 21 / 23 | 39 / 40 | 23 / 26 |
+| Extraits vérifiés mot pour mot, 32 questions (comparaison des modèles) | — | 79 / 83 | 75 / 79 | 78 / 85 |
+| Réponses appuyées sur un extrait vérifié d'un article attendu (27 questions) | — | 22 / 27 | 23 / 27 | 22 / 27 |
+| Questions hors sujet refusées | h01 refusée (avec l'alerte « aucune citation »), h02 hors cadre expliqué par le modèle | 2/2 refus standard, sans alerte ; v1 : 3/3 | 2/2 ; v1 : 3/3 | 2/2 ; v1 : **2/3** (h05 traitée) |
+| Réponses avec au moins une citation [n] (10 questions v0) | — | 2 / 10 | **10 / 10** | 9 / 10 |
+| Réponses avec au moins une citation [n] (32 questions, réponses données) | — | 5 / 27 | **26 / 26** | 28 / 28 |
+| Tutoiements (32 questions) | — | 3 | **0** | 0 |
+| Réponses avec au moins une alerte (12 questions ; contrôles de chaque séance) | — | 9 / 12 | **3 / 12** | 4 / 12 |
+| Réponses avec au moins une alerte (32 questions ; contrôles de chaque séance) | — | 23 / 32 (25 alertes) | **7 / 32 (10 alertes)** | 15 / 32 (24 alertes) |
+| Réponses avec au moins une alerte (32 questions ; **contrôles actuels** pour toutes) | — | 16 / 32 (22) | 16 / 32 (23) | 15 / 32 (24) |
+| Réponses coupées (32 questions) | — | 0 | 1 (q23) | 2 (q04, q23) |
+| Longueur moyenne des réponses données (mots ; 12 questions · 32 questions) | — | 97 · 80 | 86 · 91 | **124 · 131** |
+| Prompt système (caractères) · prompt lu en moyenne (tokens, 32 questions) | — | 1 622 · non mesuré | 2 613 · non mesuré | 3 678 · 3 186 |
+| Temps moyen par question (12 questions) | 18 s (`ministral-3:3b`, sans extraits) | 31 s (`qwen3:4b-instruct`, avec extraits) | 41 s (machine plus lente ce jour-là, voir section 7) | 38 s |
 
-La justesse des réponses s'établit par relecture humaine : `eval/review_v0.md`, `eval/review_v1.md` ; `eval/answers_v2.md` reste à relire.
+La justesse des réponses s'établit par relecture humaine : `eval/review_v0.md`, `eval/review_v1.md`, `eval/review_v2.md` ; `eval/answers_v3.md` reste à relire. Les temps de séances différentes ne se comparent pas directement (machine plus ou moins rapide) : la comparaison des prompts v1 et v3 **le même jour, sur les mêmes passages**, est en section 8.4.
 
 ## 6. Points ouverts, pour la relecture et la suite
 
@@ -264,3 +268,100 @@ Commande : `scripts/compare_models.py qwen3:4b-instruct` (nouvelles colonnes : r
 - **q03** : la réponse donne le principe (art. 5) sans dire que les durées concrètes viennent d'autres textes : la règle de complétude n'est pas appliquée.
 - **Limite de l'alerte « phrase non appuyée »** : maintenant que presque toutes les réponses ont des [n], elle ne joue presque plus. Une phrase sans [n] dans une réponse qui en a ailleurs n'est pas vérifiée (q10). Piste : vérifier chaque phrase sans [n] (à mesurer : risque de plus d'alertes).
 - **Longueur** : q23 coupée (un paragraphe entier recopié comme un seul extrait), q04 avec 19 extraits (limite de quatre ignorée, 92 s).
+
+## 8. Séance 5 ter — corriger les reculs de la v2
+
+Relecture de l'auteur (`eval/review_v2.md`) : 6 justes, 5 partielles (q01, q02, q06, q07, q10), 1 fausse (q08, exception inversée). La v2 recule par rapport à la v1 (9 justes). Les corrections sont générales et l'exemple du prompt reste fictif. Les contrôles ont été calibrés en relisant les réponses enregistrées des 32 questions (v0 et v1) ; cela figurait dans le plan validé.
+
+### 8.1 Diagnostic, avant tout changement
+
+- **q06** : l'art. 34 (informer les personnes) est bien le passage [2]. Le modèle ne l'a jamais recopié. **C'est un problème de rédaction, pas de recherche** : la recherche n'a pas changé.
+- **q01** : le modèle a recopié l'annonce de la liste (« … désignent en tout état de cause un délégué … lorsque: … ») et a sauté les cas a), b), c) grâce au « … ». Dans la comparaison des 32 questions, il invente même une exception (« sauf si vous n'effectuez pas … »).
+- **q07, q10** : chaque passage commence déjà par son règlement et son article. Le mélange vient de la rédaction, pas d'une information manquante.
+
+### 8.2 Prompt v3
+
+Nouvelles règles générales :
+- exceptions et conditions recopiées **mot pour mot entre « »**, sans ajouter ni retirer de « ne … pas » ;
+- chaque obligation nomme son règlement, son article et **qui est visé** ; jamais deux obligations de textes différents sous un même nom ;
+- listes de cas reprises **en entier**, ou annoncées comme partielles (« parmi d'autres cas ») ;
+- un extrait de chaque passage utile d'abord ; **6 extraits** au plus (avant : 4).
+
+Le prompt passe de 2 613 à 3 678 caractères (v1 : 1 622).
+
+### 8.3 Contrôles par le code, mesurés sur les réponses enregistrées
+
+Chaque contrôle donne au plus une alerte par réponse. Les réponses sont rejouées dans les contrôles actuels, sans appeler le modèle, avec les mêmes formules pour toutes les versions. Nombre de réponses signalées sur 32 :
+
+| Contrôle | v1 (séance 5) | v2 (séance 5 bis) | v3 | Prompt v1 rejoué le même jour que la v3 |
+|---|---|---|---|---|
+| Négation ajoutée ou retirée dans une exception | 0 | **1 (q08, vraie erreur)** | 1 (q11, **fausse alerte**) | 0 |
+| Texte entre « » absent des extraits | 0 | 0 | 0 | 0 |
+| Exception reformulée sans reprendre les extraits | 1 (q10, inventée) | 3 (**q01 inventée**, q07, q24) | 2 (q23, h05) | 4 (q02, q07, q08, q23) |
+| Liste de cas incomplète | 1 (q27) | 3 (**q01 : 0 cas sur 3**, q11, q27) | **0** | 2 (q07, q27) |
+| Obligation d'un fournisseur sans le nommer | 0 | 3 (**q08, q10**, q15) | 3 (**q08, q10**, q15) | 0 (contrôle aveugle sans [n]) |
+| Règlement non nommé (réponse mixte) | 0 | 3 (q07, q16, q22) | 3 (q16, q19, q22) | 1 (q22) |
+
+Les phrases fausses de la v2 sont devenues des **tests de non-régression** dans `tests/test_rag.py`, avec leurs vrais extraits :
+- q08 : la négation inversée ;
+- q01 : la liste de 0 cas sur 3 et l'exception inventée ;
+- q10 : l'obligation du fournisseur ;
+- q07 : la phrase sans règlement.
+
+D'autres tests vérifient ce qui ne doit pas alerter : q02 v2, une citation exacte, une liste de contenu.
+
+**Utilité constatée :**
+- *Négation inversée* : utile (q08 v2). Fausse alerte en v3 sur q11 : le morceau comparé déborde après les deux-points d'une liste (« lorsque l'un des motifs suivants s'applique : les données ne sont plus nécessaires »). Correction simple : arrêter le morceau au « : ». Elle n'est **pas** faite ici, parce que l'erreur a été vue sur une question v1, qui sert seulement à mesurer. Elle est à valider.
+- *Liste de cas incomplète* : utile (q01 v2), muette en v3 parce que le modèle reprend maintenant les listes (q01, q11).
+- *Obligation d'un fournisseur* : utile (q08 et q10, le défaut relevé par l'auteur). Elle ne fonctionne que si la réponse cite ses passages [n] : avec le prompt v1, elle ne voit presque rien.
+- *Exception reformulée* : utile (exceptions inventées q01 v2, q10 v1), avec quelques alertes discutables.
+- *Guillemets* : aucune alerte pour l'instant. Le modèle cite peu entre « », et ses citations sont exactes (q06 v3).
+- *Règlement non nommé* : **le moins utile**. Ses alertes en v3 (q16, q19, q22) ne relèvent pas de vraie confusion. Il ne voit pas l'erreur réelle de q07 dans `answers_v2.md` : la phrase qui confond les deux analyses contient « IA », ce qui lui suffit.
+
+### 8.4 v3 contre v1, le même jour, sur les mêmes passages
+
+Commande : `compare_models.py qwen3:4b-instruct --prompt-file <prompt v1>`, avec le prompt de la séance 5 tiré de Git (`git show d4ff948:src/compliance_copilot/rag.py`). Même machine (sur secteur), mêmes passages, mêmes contrôles.
+
+| Mesure (32 questions) | Prompt v1 | Prompt v3 |
+|---|---|---|
+| Réponses données (sur 27) | 26 (q10 refusée : aucun extrait vérifié) | 27 |
+| Avec un extrait vérifié d'un article attendu | 22 | 22 |
+| Hors sujet refusés (sur 5) | **5** | 4 (h05 traitée) |
+| Extraits vérifiés / recopiés | 70 / 75 (93 %) | 78 / 85 (92 %) |
+| Réponses coupées | **0** | 2 (q04, q23) |
+| Réponses avec [n] | 4 / 26 | **28 / 28** |
+| Tutoiements | 3 | **0** |
+| Réponses avec au moins une alerte | 19 / 32 (31 alertes) | **15 / 32 (24 alertes)** |
+| Longueur moyenne des réponses données | **80 mots** | 131 mots |
+| Prompt lu (tokens, moyenne) | **2 604** | 3 186 |
+| Génération moyenne | **30,9 s** | 32,8 s |
+
+Fond des six questions relevées par l'auteur. C'est ma lecture, pas une relecture de référence :
+
+| Question | Prompt v1 (même jour) | Prompt v3 (`answers_v3.md`) |
+|---|---|---|
+| q01 DPO | les 3 cas, sans [n] | **les 3 cas** de l'art. 37, § 1 ; citation vers un passage [7] inexistant (signalée) |
+| q02 registre | exception incomplète (« non occasionnel » et données sensibles oubliés) | **exception complète**, « non occasionnel » compris |
+| q06 fuite | art. 34 oublié | **art. 34 présent** (informer les personnes en cas de risque élevé) |
+| q07 AIPD | AIPD et analyse sur les droits fondamentaux séparées | **séparées** (art. 35 RGPD, art. 27 AI Act) |
+| q08 chatbot | exception paraphrasée (« naturelle ou implicite », « évident ou inévitable ») | **exception fidèle** au texte ; mais l'obligation du fournisseur n'est pas attribuée (signalé) |
+| q10 IA générative | refus (aucun extrait vérifié) | art. 4 et art. 50, § 4 présents ; art. 50, § 1 (fournisseurs) encore présenté comme « vous devez » (signalé) ; extrait de l'art. 4 non vérifié (le modèle y a glissé « which ») |
+
+**Conclusion** : sur les points relevés par l'auteur, la v3 fait **mieux** que le prompt v1, le même jour et sur les mêmes passages (q02, q06, q08, q10 ; égalité pour q01 et q07). Elle a aussi plus de [n], aucun tutoiement et moins d'alertes. **Je ne propose donc pas de revenir au prompt v1.**
+
+La v3 a trois reculs :
+- une question hors sujet traitée (h05, « Comment rédiger les statuts d'une association ? », avec 5 extraits sans rapport) ;
+- 2 réponses coupées ;
+- des réponses 60 % plus longues.
+
+Cause probable : la règle « un extrait de chaque passage utile d'abord » et la limite portée à 6 extraits, qui poussent le modèle à se servir de tous les passages. **Proposition pour la suite** (non faite, à valider) : retirer cette règle en gardant « répondre à chaque partie », puis remesurer v0 et v1.
+
+### 8.5 Points ouverts, pour la relecture de `answers_v3.md`
+
+- **q08 et q10** : l'obligation du fournisseur (art. 50, § 1) reste présentée comme celle de l'organisation qui utilise l'outil. Le code le signale, mais le modèle ne suit pas la règle du prompt.
+- **q01** : citation vers un passage [7] inexistant (signalée).
+- **q10** : l'extrait de l'art. 4 n'est pas vérifié, parce que le modèle a glissé un mot anglais (« which ») dans sa copie. L'alerte « cite [5] sans extrait vérifié » le signale.
+- **h05** : question hors sujet traitée (recul, voir 8.4).
+- **Faute de frappe** (q09 v2 « Cependi ») : pas de correction générale sans dictionnaire.
+- **Contrôle « règlement non nommé »** : à garder ou à retirer (voir 8.3).
+- **Fausse alerte « négation »** sur q11 : correction proposée, non faite (voir 8.3).
