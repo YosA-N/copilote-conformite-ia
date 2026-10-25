@@ -1,0 +1,20 @@
+{"id": "q11", "verdict": "juste", "comment": ""}
+{"id": "q12", "verdict": "partiel", "comment": "Donne la copie (art. 15, § 3) mais oublie les informations de l'art. 15, § 1 (finalités, destinataires, durée, droits) et le délai d'un mois ; cite l'art. 14 pour la source."}
+{"id": "q13", "verdict": "juste", "comment": ""}
+{"id": "q14", "verdict": "faux", "comment": "Art. 21 non trouvé ; base légale inventée (« le RGPD permet le traitement pour des finalités de communication ») ; droit d'opposition attribué à l'art. 15 ; ne signale pas que la prospection électronique dépend d'autres textes ; réponse coupée."}
+{"id": "q15", "verdict": "dangereux", "comment": "Art. 28 non trouvé ; laisse croire qu'un contrat n'est obligatoire que pour un système d'IA à haut risque, alors que l'art. 28, § 3 impose toujours un contrat avec un sous-traitant."}
+{"id": "q16", "verdict": "partiel", "comment": "Art. 46 juste et renvoi à d'autres textes correct, mais oublie la décision d'adéquation (art. 45) et ajoute un paragraphe sans rapport sur le registre (art. 30)."}
+{"id": "q17", "verdict": "juste", "comment": ""}
+{"id": "q18", "verdict": "dangereux", "comment": "Art. 9, § 1 et § 2 non trouvés ; invente une condition (« si un professionnel de santé s'en occupe », art. 9, § 3 hors contexte) au lieu de l'interdiction de principe et de ses exceptions (consentement explicite, associations pour leurs membres)."}
+{"id": "q19", "verdict": "juste", "comment": ""}
+{"id": "q20", "verdict": "faux", "comment": "Affirme « 16 ans » sans dire que les États peuvent descendre jusqu'à 13 ans (pourtant dans l'extrait de l'art. 8) ni que la réponse dépend du droit national (15 ans en France)."}
+{"id": "q21", "verdict": "partiel", "comment": "Principes justes (art. 5, art. 25) mais l'art. 32 (sécurité : chiffrement, pseudonymisation, confidentialité, disponibilité, tests) n'est pas trouvé."}
+{"id": "q22", "verdict": "partiel", "comment": "« Pas obligatoirement par écrit » est juste, mais oublie que le responsable doit pouvoir démontrer le consentement (art. 7, § 1), et lit mal l'art. 7, § 2."}
+{"id": "q23", "verdict": "partiel", "comment": "Liste juste mais réponse coupée (limite de tokens) : il manque plusieurs pratiques interdites."}
+{"id": "q24", "verdict": "dangereux", "comment": "Art. 5 non trouvé ; répond « Oui, vous pouvez » alors que la reconnaissance des émotions sur le lieu de travail est INTERDITE (AI Act art. 5, § 1, f), sauf raisons médicales ou de sécurité."}
+{"id": "q25", "verdict": "faux", "comment": "Fait de la « capacité d'adaptation après déploiement » un critère obligatoire, alors que la définition dit que le système « peut faire preuve » d'adaptation : le test juridique est changé."}
+{"id": "q26", "verdict": "dangereux", "comment": "« Oui, vous devez indiquer » sans la condition d'hypertrucage (art. 50, § 4) : obligation inventée pour toute image ; le marquage (§ 2) vise le fournisseur, sans le nommer."}
+{"id": "q27", "verdict": "faux", "comment": "Présente « 750 000 EUR » (art. 100, institutions de l'UE) comme l'amende générale ; oublie l'art. 99, § 4 (15 M EUR ou 3 %) et la règle plus favorable aux PME (art. 99, § 6)."}
+{"id": "h03", "verdict": "juste", "comment": ""}
+{"id": "h04", "verdict": "juste", "comment": ""}
+{"id": "h05", "verdict": "faux", "comment": "Question hors sujet traitée au lieu d'être refusée ; attribue à l'art. 4 du RGPD un rôle dans les statuts."}
