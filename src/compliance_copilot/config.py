@@ -30,6 +30,7 @@ class Settings:
     llm_max_tokens: int = 1500  # room for the verbatim extracts, then the answer
     search_mode: str = "vector"  # "vector" or "hybrid" (vectors + BM25, measured worse in session 5)
     search_lexicon: str = "all"  # "off", "keywords" or "all": add legal wording to the question
+    search_max_per_article: int | None = 2  # at most 2 chunks of the same article among the passages
 
 
 def optional_int(value: str | None) -> int | None:
@@ -52,4 +53,5 @@ def load_settings() -> Settings:
         llm_max_tokens=int(os.getenv("LLM_MAX_TOKENS", "1500")),
         search_mode=os.getenv("SEARCH_MODE", "vector").strip().lower(),
         search_lexicon=os.getenv("SEARCH_LEXICON", "all").strip().lower(),
+        search_max_per_article=optional_int(os.getenv("SEARCH_MAX_PER_ARTICLE", "2")),
     )

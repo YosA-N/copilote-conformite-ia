@@ -18,12 +18,13 @@ from compliance_copilot.evaluation import first_hit_rank, hit_at_k, load_questio
 from compliance_copilot.index import IndexNotReadyError, search
 
 DEPTH = 20
-CONFIGS = [  # (label, mode, lexicon)
-    ("vecteurs seuls (départ)", "vector", "off"),
-    ("vecteurs + lexique", "vector", "all"),
-    ("hybride", "hybrid", "off"),
-    ("hybride + lexique (mots-clés)", "hybrid", "keywords"),
-    ("hybride + lexique (partout)", "hybrid", "all"),
+CONFIGS = [  # (label, mode, lexicon, at most N chunks of the same article)
+    ("vecteurs seuls (départ)", "vector", "off", None),
+    ("vecteurs + lexique", "vector", "all", None),
+    ("vecteurs + lexique + 2 par article", "vector", "all", 2),
+    ("hybride", "hybrid", "off", None),
+    ("hybride + lexique (mots-clés)", "hybrid", "keywords", None),
+    ("hybride + lexique (partout)", "hybrid", "all", None),
 ]
 SETS = [("v0", "questions_v0.jsonl"), ("v1", "questions_v1.jsonl")]
 
@@ -59,12 +60,15 @@ def main() -> int:
     for run in range(args.repeat):
         embedder = CachedEmbedder(make_embedder(settings, settings.query_embedding_device))  # fresh vectors each run
         ranks: dict[tuple[str, str], list[int | None]] = {}
-        for label, mode, lexicon in CONFIGS:
+        for label, mode, lexicon, limit in CONFIGS:
             print(f"… mesure {run + 1}/{args.repeat} : {label}", file=sys.stderr, flush=True)
             for name, questions in question_sets.items():
                 try:
                     ranks[label, name] = [
-                        first_hit_rank([r.id for r in search(q.question, INDEX_DIR, embedder, k=DEPTH, mode=mode, lexicon=lexicon)], q.expected)
+                        first_hit_rank(
+                            [r.id for r in search(q.question, INDEX_DIR, embedder, k=DEPTH, mode=mode, lexicon=lexicon, max_per_article=limit)],
+                            q.expected,
+                        )
                         for q in questions
                     ]
                 except (IndexNotReadyError, EmbeddingError) as error:
@@ -76,7 +80,7 @@ def main() -> int:
     header = " | ".join(f"{name} hit@1 | {name} hit@5" for name, _ in SETS)
     print(f"| Configuration | {header} |")
     print("|---|" + "---|" * (2 * len(SETS)))
-    for label, _, _ in CONFIGS:
+    for label, *_ in CONFIGS:
         cells = " | ".join(
             f"{spread([hit_at_k(r[label, name], 1) for r in runs])}/{len(question_sets[name])} | "
             f"{spread([hit_at_k(r[label, name], 5) for r in runs])}/{len(question_sets[name])}"
@@ -85,11 +89,11 @@ def main() -> int:
         print(f"| {label} | {cells} |")
 
     print("\nRang du premier article attendu (— = pas dans les 20 premiers) :\n")
-    print("| Question | " + " | ".join(label for label, _, _ in CONFIGS) + " |")
+    print("| Question | " + " | ".join(label for label, *_ in CONFIGS) + " |")
     print("|---|" + "---|" * len(CONFIGS))
     for name, questions in question_sets.items():
         for index, question in enumerate(questions):
-            cells = " | ".join(spread([r[label, name][index] or "—" for r in runs]) for label, _, _ in CONFIGS)
+            cells = " | ".join(spread([r[label, name][index] or "—" for r in runs]) for label, *_ in CONFIGS)
             print(f"| {question.id} | {cells} |")
     return 0
 

@@ -18,6 +18,10 @@ from compliance_copilot.rag import (
     normalize_citations,
     parse_extracts,
     render_footer,
+    support_ratio,
+    unbacked_absence_claims,
+    unsupported_sentences,
+    uses_tu,
 )
 
 QUESTION = "Dois-je désigner un délégué ?"
@@ -42,8 +46,15 @@ def test_prompt_gives_the_rules_and_numbers_the_passages_in_order(passages):
     system, user = build_messages(QUESTION, passages)
 
     assert system["role"] == "system" and system["content"] == SYSTEM_PROMPT
-    for rule in ("UNIQUEMENT", "N'invente jamais", "EXTRAITS :", "RÉPONSE :", "mot pour mot", REFUSAL):
+    for rule in (
+        "UNIQUEMENT", "N'inventez jamais", "EXTRAITS :", "RÉPONSE :", "mot pour mot", REFUSAL,
+        "Exemple de forme (contenu fictif)",  # shows where the [n] go
+        "les passages trouvés ne traitent pas de ce point",  # no "aucune obligation" from silence
+        "Répondez à chaque partie de la question",
+        "Vouvoyez toujours",
+    ):
         assert rule in SYSTEM_PROMPT
+    assert not SYSTEM_PROMPT.startswith("Tu ")  # the prompt itself says "vous" to the model
     assert user["content"].startswith("Passages :\n\n[1] RGPD — règlement (UE) 2016/679 — Article 37")
     assert user["content"].index("[1] ") < user["content"].index("[2] ") < user["content"].index("[3] ")
     assert user["content"].endswith(f"Question : {QUESTION}")
@@ -187,6 +198,113 @@ def test_stream_shows_the_refusal_when_no_extract_is_verified(passages):
     stream.close()
 
     assert "".join(shown) == REFUSAL
+
+
+# ---------------------------------------------------------------- checks of the answer text
+
+# Sentences of the law, as they appear in the corpus
+AI_ACT_18 = (
+    "Pendant une période prenant fin 10 ans après la mise sur le marché ou la mise en service du système d'IA "
+    "à haut risque, le fournisseur tient à la disposition des autorités nationales compétentes"
+)
+AI_ACT_ANNEX_3_POINT_4 = (
+    "systèmes d'IA destinés à être utilisés pour le recrutement ou la sélection de personnes physiques, en particulier "
+    "pour publier des offres d'emploi ciblées, analyser et filtrer les candidatures et évaluer les candidats"
+)
+AI_ACT_26 = (
+    "Les déployeurs de systèmes d'IA à haut risque prennent des mesures techniques et organisationnelles appropriées "
+    "afin de garantir qu'ils utilisent ces systèmes conformément aux notices d'utilisation accompagnant les systèmes"
+)
+AI_ACT_50 = (
+    "Les déployeurs d'un système d'IA qui génère ou manipule des textes publiés dans le but d'informer le public sur "
+    "des questions d'intérêt public indiquent que le texte a été généré ou manipulé par une IA."
+)
+
+# Non-regression: wrong sentences really written by the copilot (eval/answers_v0.md and answers_v1.md),
+# with the extracts they relied on. The checks must keep flagging them.
+KNOWN_WRONG = {
+    "q03 v0, durée inventée": (
+        "D'après le RGPD, vous devez conserver les données de vos clients ou adhérents pendant une durée maximale "
+        "de 10 ans après la fin de leur relation avec votre association ou entreprise",
+        [AI_ACT_18],
+    ),
+    "q09 v0, interdiction inventée": (
+        "Non, vous ne pouvez pas utiliser une IA pour trier des CV dans le cadre d'un système d'IA à haut risque",
+        [AI_ACT_ANNEX_3_POINT_4],
+    ),
+    "q10 v1, absence d'obligation inventée": (
+        "Aucune obligation n'est énoncée pour l'usage privé ou interne par des salariés ou bénévoles, sauf si des contenus sont publiés.",
+        [AI_ACT_26, AI_ACT_50],
+    ),
+}
+
+
+@pytest.mark.parametrize("case", KNOWN_WRONG)
+def test_known_wrong_sentences_are_flagged_as_unsupported(case):
+    sentence, extracts = KNOWN_WRONG[case]
+
+    assert support_ratio(sentence, extracts) < 0.35
+    assert unsupported_sentences(sentence, extracts) == [sentence]
+
+
+@pytest.mark.parametrize("case", ["q09 v0, interdiction inventée", "q10 v1, absence d'obligation inventée"])
+def test_known_absence_claims_without_negative_extract_are_flagged(case):
+    sentence, extracts = KNOWN_WRONG[case]
+
+    assert unbacked_absence_claims(sentence, extracts) == [sentence]
+
+
+def test_absence_claim_backed_by_a_negative_extract_is_accepted():
+    negative = "Les paragraphes 1 et 2 ne s'appliquent pas dans la mesure où ce traitement est nécessaire au respect d'une obligation légale."
+
+    assert unbacked_absence_claims("Cette obligation ne s'applique pas si le traitement est imposé par la loi.", [negative]) == []
+    # the wording asked by the prompt speaks of the passages, not of the law
+    assert unbacked_absence_claims("Les passages trouvés ne traitent pas de ce point pour les bénévoles.", [AI_ACT_26]) == []
+    assert unbacked_absence_claims("Ce point n'est pas précisé dans les passages trouvés pour les bénévoles.", [AI_ACT_26]) == []
+
+
+def test_sentence_close_to_the_extracts_is_supported():
+    close = "Le responsable du traitement et le sous-traitant désignent un délégué à la protection des données dans ces cas."
+
+    assert unsupported_sentences(close, [ARTICLE_37]) == []
+
+
+def test_tutoiement_is_detected_but_not_inside_ordinary_words():
+    assert uses_tu("Tu dois tenir un registre.")
+    assert uses_tu("Vous pouvez demander une copie de tes données.")
+    assert uses_tu("Le responsable doit t'informer.")
+    assert not uses_tu("Vous devez tenir un registre : l'état et le statut de vos traitements y figurent.")
+
+
+def test_answer_without_citation_but_close_to_its_extracts_gets_no_alert(passages):
+    reply = (
+        f"EXTRAITS :\n- [1] « {ARTICLE_37} »\n\nRÉPONSE :\n"
+        "Oui : le responsable du traitement et le sous-traitant désignent un délégué à la protection des données dans certains cas."
+    )
+
+    answer = answer_from_passages(QUESTION, passages, FakeChatModel(reply=reply))
+
+    assert answer.warnings == []
+
+
+def test_answer_without_citation_and_with_an_invented_sentence_gets_an_alert(passages):
+    reply = (
+        f"EXTRAITS :\n- [1] « {ARTICLE_37} »\n\nRÉPONSE :\n"
+        "Oui, toutes les associations doivent nommer chaque année un référent informatique bénévole."
+    )
+
+    answer = answer_from_passages(QUESTION, passages, FakeChatModel(reply=reply))
+
+    assert any("ne reprend pas les extraits vérifiés" in warning for warning in answer.warnings)
+
+
+def test_absence_claim_and_tutoiement_are_reported(passages):
+    reply = f"EXTRAITS :\n- [1] « {ARTICLE_37} »\n\nRÉPONSE :\nTu n'as rien à faire : il n'y a aucune obligation de désigner un délégué [1]."
+
+    answer = answer_from_passages(QUESTION, passages, FakeChatModel(reply=reply))
+
+    assert any("absence ou une impossibilité" in warning for warning in answer.warnings)
+    assert any("tutoie" in warning for warning in answer.warnings)
 
 
 # ---------------------------------------------------------------- whole answer

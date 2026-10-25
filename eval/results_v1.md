@@ -1,4 +1,6 @@
-# Résultats de la séance 5 — avant / après
+# Résultats des séances 5 et 5 bis — avant / après
+
+Séance 5 : sections 1 à 6. Séance 5 bis (corrections après la relecture `eval/review_v1.md`) : section 7, et colonne « séance 5 bis » de la section 5.
 
 Toutes les mesures sont produites par les scripts du dépôt. Les questions `eval/questions_v1.jsonl` ont été écrites et commitées (`c57bc66`) **avant** toute amélioration : elles servent seulement à mesurer, on ne règle rien dessus. Les questions v0 servent, elles, à diagnostiquer et à régler.
 
@@ -144,17 +146,23 @@ Détail du 2e tour (état, extraits vérifiés / recopiés, « attendu » = au m
 
 Meilleure configuration : recherche par vecteurs `bge-m3` + lexique, 5 passages ; `qwen3:4b-instruct`, extraits vérifiés, 1 500 tokens au plus. Réponses brutes, non relues : `eval/answers_v1.md`.
 
-| Mesure | Avant (séance 4) | Après (séance 5) |
-|---|---|---|
-| Recherche, v0 : hit@1 / hit@5 | 6/10 · 7/10 | **7/10 · 9/10** |
-| Recherche, v1 : hit@1 / hit@5 | 9/17 · 11–12/17 | **10/17 · 13/17** |
-| Extraits vérifiés mot pour mot, 12 questions de `answers_v1.md` | non mesurable (pas d'extraits) | **21 / 23** |
-| Extraits vérifiés mot pour mot, 32 questions (comparaison des modèles) | — | 79 / 83 |
-| Réponses appuyées sur un extrait vérifié d'un article attendu (27 questions) | — | 22 / 27 |
-| Questions hors sujet refusées | h01 refusée (avec l'alerte « aucune citation »), h02 hors cadre expliqué par le modèle | **2/2 refus standard, sans alerte** ; v1 : 3/3 |
-| Temps moyen par question (12 questions) | 18 s (`ministral-3:3b`, sans extraits) | 31 s (`qwen3:4b-instruct`, avec extraits) |
+| Mesure | Avant (séance 4) | Après (séance 5) | Séance 5 bis |
+|---|---|---|---|
+| Recherche, v0 : hit@1 / hit@5 | 6/10 · 7/10 | 7/10 · 9/10 | 7/10 · **10/10** |
+| Recherche, v1 : hit@1 / hit@5 | 9/17 · 11–12/17 | 10/17 · 13/17 | 10/17 · 13/17 |
+| Extraits vérifiés mot pour mot, 12 questions (`answers_v1.md`, puis `answers_v2.md`) | non mesurable (pas d'extraits) | 21 / 23 | 39 / 40 |
+| Extraits vérifiés mot pour mot, 32 questions (comparaison des modèles) | — | 79 / 83 | 75 / 79 |
+| Réponses appuyées sur un extrait vérifié d'un article attendu (27 questions) | — | 22 / 27 | 23 / 27 |
+| Questions hors sujet refusées | h01 refusée (avec l'alerte « aucune citation »), h02 hors cadre expliqué par le modèle | 2/2 refus standard, sans alerte ; v1 : 3/3 | 2/2 ; v1 : 3/3 |
+| Réponses avec au moins une citation [n] (10 questions v0) | — | 2 / 10 | **10 / 10** |
+| Réponses avec au moins une citation [n] (32 questions, réponses données) | — | 5 / 27 | **26 / 26** |
+| Tutoiements (32 questions) | — | 3 | **0** |
+| Réponses avec au moins une alerte (12 questions) | — | 9 / 12 | **3 / 12** |
+| Réponses avec au moins une alerte (32 questions) | — | 23 / 32 (25 alertes) | **7 / 32 (10 alertes)** |
+| Réponses coupées (32 questions) | — | 0 | 1 (q23) |
+| Temps moyen par question (12 questions) | 18 s (`ministral-3:3b`, sans extraits) | 31 s (`qwen3:4b-instruct`, avec extraits) | 41 s (machine plus lente ce jour-là, voir section 7) |
 
-La justesse des réponses reste à établir par relecture humaine de `eval/answers_v1.md`, comme pour `eval/review_v0.md`.
+La justesse des réponses s'établit par relecture humaine : `eval/review_v0.md`, `eval/review_v1.md` ; `eval/answers_v2.md` reste à relire.
 
 ## 6. Points ouverts, pour la relecture et la suite
 
@@ -164,3 +172,95 @@ La justesse des réponses reste à établir par relecture humaine de `eval/answe
 - **Nombre d'extraits** : qwen dépasse parfois la limite de quatre (12 pour q04 au 2e tour).
 - **Variabilité** : ±1 rang possible sur les passages aux scores presque égaux (voir section 1).
 - **Questions partiellement couvertes** (q14, q16, q20 ; q03 en v0) : à relire avec le critère « dire ce que dit le texte et signaler que la réponse complète dépend d'autres textes ».
+
+## 7. Séance 5 bis — corrections après la relecture de `answers_v1.md`
+
+Relecture de l'auteur (`eval/review_v1.md`) : 9 réponses justes, 2 partielles (q02 oublie la condition « pas de données sensibles » de l'art. 30, § 5 ; q06 oublie l'information des personnes, art. 34), 1 fausse et dangereuse (q10). Les corrections sont générales : aucune règle n'est écrite pour une seule question. Tout est mesuré sur v0 et v1.
+
+### 7.1 Recherche : au plus 2 passages d'un même article
+
+Diagnostic de q10, avant tout changement :
+- sans lexique, l'art. 4 (maîtrise de l'IA) n'est pas dans les 20 premiers (similarité 0,567) ; avec le lexique, il est au rang 7 (0,656) ;
+- les 5 passages venaient de **2 articles seulement** (art. 50 ×2, art. 26 ×3). Cause générale : un long article découpé en paragraphes peut occuper tout le top 5.
+
+Correction : la recherche prend 20 candidats, puis écarte le 3e morceau d'un même article et les suivants (`SEARCH_MAX_PER_ARTICLE=2`). Le lexique n'a pas changé : une entrée taillée pour q10 serait une règle pour une seule question.
+
+Commande : `scripts/compare_retrieval.py --repeat 3` (trois mesures identiques).
+
+| Configuration | v0 hit@1 | v0 hit@5 | v1 hit@1 | v1 hit@5 |
+|---|---|---|---|---|
+| vecteurs seuls (départ) | 6/10 | 7/10 | 9/17 | 11/17 |
+| vecteurs + lexique (séance 5) | 7/10 | 9/10 | 10/17 | 13/17 |
+| **vecteurs + lexique + 2 par article (retenu)** | 7/10 | **10/10** | 10/17 | 13/17 |
+
+Les configurations hybrides donnent les mêmes hit@1 et hit@5 qu'en section 2. Rangs modifiés par la limite : q10 passe du rang 7 au rang 5, q14 du rang 20 au rang 16 ; les autres ne bougent pas.
+
+Essai exploratoire, avant la décision : avec 1 passage par article au plus, v0 donne aussi 10/10 (q10 au rang 3) et v1 ne change pas ; le nombre moyen d'articles différents dans le top 5 passe de 3,6 (v0) et 4,2 (v1) à 4,1 et 4,4 avec 2 au plus, et 5,0 et 5,0 avec 1 au plus. On garde 2, car certaines réponses ont besoin de plusieurs paragraphes du même article.
+
+**Décision de l'auteur, et changement de règle (transparence)** : v1 ne monte pas, donc l'ancienne règle (« améliorer v0 **et** v1 ») aurait rejeté ce changement. L'auteur l'a adopté et a assoupli la règle **après avoir vu cette mesure** : désormais, un changement est gardé s'il ne fait baisser le hit@5 sur aucun jeu (v0, v1) et fait monter au moins une mesure.
+
+**Effet de bord constaté sur q07** (AIPD) : les 5 passages étaient tous des paragraphes de l'art. 35 du RGPD (§ 3, 11, 1, 7, 4) ; avec la limite, il en reste 2 (§ 3 et 11), et arrivent l'art. 27 de l'AI Act (analyse d'impact sur les **droits fondamentaux**), l'art. 26, § 9 et l'art. 83. Le § 1 de l'art. 35, qui pose la règle générale, n'est plus donné au modèle. La réponse v2 confond alors les deux analyses (« Elle est également obligatoire avant le déploiement d'un système d'IA à haut risque [3] »). Le hit@5 ne voit pas ce recul, car il compte l'article et non le paragraphe. q07 était jugée juste en v1.
+
+### 7.2 Prompt
+
+- Réécrit entièrement au « vous » : un prompt qui tutoie le modèle l'incite à tutoyer l'utilisateur.
+- Un court exemple de forme, au contenu **fictif** (« obligation X », « cas Y »), montre où placer les [n] ; rien n'est emprunté aux questions de test.
+- Quatre règles générales : ne jamais conclure « aucune obligation » parce que les passages n'en parlent pas (écrire « les passages trouvés ne traitent pas de ce point ») ; répondre à chaque partie de la question ; quand le texte ne donne qu'un principe (par exemple une durée de conservation), le dire et préciser que les règles concrètes peuvent venir d'autres textes (droit national, CNIL) ; toujours vouvoyer.
+
+### 7.3 Contrôles de la réponse par le code
+
+**Alerte « phrase non appuyée »** (remplace « La réponse ne cite aucun passage », seulement quand la réponse n'a aucun [n]) : une phrase est signalée si moins de **35 %** de ses mots significatifs (racines, comme pour BM25) se retrouvent dans les extraits vérifiés. Seuil choisi par l'auteur d'après cette mesure sur les 27 réponses de qwen enregistrées à la séance 5 :
+
+| Seuil | Réponses avec l'alerte (sur 27) | q03 v0 « 10 ans » (31 %) | q09 v0 « vous ne pouvez pas » (30 %) | q10 v1 « aucune obligation » (9 %) |
+|---|---|---|---|---|
+| 60 % | 19 | signalée | signalée | signalée |
+| 50 % | 14 | signalée | signalée | signalée |
+| 45 % | 14 | signalée | signalée | signalée |
+| 40 % | 12 | signalée | signalée | signalée |
+| **35 %** | **12** | signalée | signalée | signalée |
+| 30 % | 11 | **non signalée** | signalée | signalée |
+
+Les trois phrases fausses sont des **tests de non-régression** (`KNOWN_WRONG` dans `tests/test_rag.py`), avec les vrais extraits sur lesquels le modèle s'appuyait (AI Act art. 18 ; annexe III, point 4 ; art. 26 et art. 50). La nouvelle alerte les signale toutes : elle remplace donc l'ancienne.
+
+**Règle d'absence** (demandée par l'auteur, toujours active) : une phrase qui affirme une absence ou une impossibilité (« aucune obligation », « n'est pas obligatoire », « ne s'applique pas », « vous ne pouvez pas »…) est signalée si aucun extrait vérifié ne contient lui-même une négation. Les phrases qui parlent des passages (« les passages trouvés ne traitent pas de ce point ») ne sont pas visées : c'est la formulation demandée au modèle. Tests : q09 et q10 signalées. Fausses alertes connues, sur des déductions justes : q01 (séance 5, « cela n'est pas obligatoire »), q22 (« le consentement n'est pas obligatoirement donné par écrit »).
+
+**Tutoiement** : « tu », « toi », « te », « t' », « ton », « ta », « tes » dans la réponse (pas dans les extraits).
+
+Ces contrôles ne comprennent pas le sens : ce sont des signaux pour la relecture, pas des preuves.
+
+### 7.4 Génération (32 questions, mêmes réglages)
+
+Commande : `scripts/compare_models.py qwen3:4b-instruct` (nouvelles colonnes : réponses avec [n], tutoiements, alertes). La colonne « séance 5 » reprend les réponses enregistrées au 2e tour (section 4) ; elles ont aussi été repassées dans les contrôles actuels, pour séparer l'effet des nouvelles règles d'alerte de celui du nouveau prompt.
+
+| Mesure | Séance 5 (2e tour) | Séance 5 bis |
+|---|---|---|
+| Réponses données (sur 27) | 27 | 26 (q23 coupée, refus par prudence) |
+| Avec un extrait vérifié d'un article attendu | 22 | 23 |
+| Hors sujet refusés (sur 5) | 5 | 5 |
+| Extraits vérifiés / recopiés | 79 / 83 | 75 / 79 |
+| Réponses coupées | 0 | 1 |
+| Réponses avec au moins une citation [n] | 5 / 27 | **26 / 26** |
+| Tutoiements | 3 (q04, q12, q24) | **0** |
+| Réponses avec au moins une alerte (sur 32) | 23 (25 alertes) ; 16 (20 alertes) avec les contrôles actuels | **7 (10 alertes)** |
+| Génération moyenne | 28,9 s | 42,1 s |
+| tokens/s | 35,9 | 21,3 |
+
+**Vitesse** : le recul ne vient pas surtout du changement. Test A/B le même jour, sur les mêmes passages, prompt de la séance 5 contre prompt 5 bis : h01 25–26 contre 23–24 tokens/s, q05 25 contre 24, q08 19–20 contre 19. Le jour des mesures, la machine était plus lente qu'à la séance 5 (h01 : 37,9 tokens/s à la séance 5 avec l'ancien prompt) ; Ollama s'était mis à jour tout seul (0.40.10 → 0.40.11). Sur un prompt court, qwen génère toujours vers 41 tokens/s. Le nouveau prompt ajoute environ 290 tokens à lire (environ 2 s) et coûte 1 à 2 tokens/s. À remesurer un autre jour.
+
+### 7.5 Vérifications demandées par l'auteur
+
+1. **Non-régression** : les trois phrases fausses (q03, q09, q10) sont signalées par la nouvelle alerte. Tests ajoutés, ils passent.
+2. **Absence** : une affirmation d'absence sans extrait négatif déclenche une alerte (tests ajoutés), avec les fausses alertes connues ci-dessus.
+3. **q10 v2 mentionne l'art. 4** : oui, « vous devez prendre des mesures pour favoriser la maîtrise de l'IA par vos salariés ou bénévoles [5] » (art. 4 au passage [5]). Deux défauts restent, pour la relecture :
+   - l'obligation de l'art. 50, § 1 vise les **fournisseurs**, mais la réponse la présente comme la vôtre (« Vous devez informer les personnes concernées… [1] ») ;
+   - la dernière phrase n'a ni [n] ni extrait (« Ces obligations s'appliquent à l'usage interne ou externe, tant que l'IA est utilisée par des personnes physiques. »). Elle n'est pas signalée, car l'alerte « phrase non appuyée » ne joue que si la réponse n'a aucun [n].
+
+### 7.6 Points ouverts, pour la relecture de `answers_v2.md`
+
+- **q07** : recul probable, dû à la limite par article (section 7.1). À trancher : garder 2 par article, passer à 3 (q10 ressortirait probablement du top 5) ou chercher une autre façon de garder le paragraphe général d'un article.
+- **q06** : l'information des personnes (art. 34) manque toujours, bien que l'art. 34 soit le passage [2] ; la règle de complétude ne suffit pas. La réponse dit aussi que le sous-traitant doit « noter » la violation (le texte dit « notifie »).
+- **q08** : exception inversée (« sauf si cela **ne** ressort **pas** clairement »), alors que le texte dit « sauf si cela ressort clairement ». Aucun contrôle ne le voit.
+- **q02** : la condition des catégories particulières de données (art. 30, § 5) apparaît désormais. À confirmer par la relecture.
+- **q03** : la réponse donne le principe (art. 5) sans dire que les durées concrètes viennent d'autres textes : la règle de complétude n'est pas appliquée.
+- **Limite de l'alerte « phrase non appuyée »** : maintenant que presque toutes les réponses ont des [n], elle ne joue presque plus. Une phrase sans [n] dans une réponse qui en a ailleurs n'est pas vérifiée (q10). Piste : vérifier chaque phrase sans [n] (à mesurer : risque de plus d'alertes).
+- **Longueur** : q23 coupée (un paragraphe entier recopié comme un seul extrait), q04 avec 19 extraits (limite de quatre ignorée, 92 s).
