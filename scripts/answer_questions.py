@@ -129,7 +129,9 @@ def main() -> int:
         "- Prompt : le modèle recopie d'abord les phrases exactes des passages (EXTRAITS), puis répond à partir d'elles "
         "seulement (RÉPONSE) ; le code vérifie chaque extrait mot pour mot et remplace par un refus une réponse sans extrait vérifié",
         "- Contrôles du code sur la réponse : citations [n], phrases trop éloignées des extraits vérifiés (si aucune citation), "
-        "affirmations d'absence sans extrait négatif, tutoiement",
+        "affirmations d'absence sans extrait négatif, tutoiement, négation ajoutée ou retirée dans une exception, texte entre « » "
+        "absent des extraits, exception reformulée, liste de cas incomplète, obligation d'un fournisseur sans le nommer, "
+        "règlement non nommé quand la réponse mêle RGPD et AI Act",
         f"- Recherche : `{settings.embedding_model}` (sur {settings.query_embedding_device.upper()}), mode « {settings.search_mode} », "
         f"lexique « {settings.search_lexicon} », 5 passages par question, "
         + (f"{settings.search_max_per_article} au plus par article" if settings.search_max_per_article else "sans limite par article"),
