@@ -75,7 +75,16 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
     - Lecture rapide de Claude, pas un verdict : q15 corrigée ; q18 toujours problématique (§ 1 et § 2 absents) ; q26 sans la condition d'hypertrucage ; h05 refusée ; q22 abstention (donc « faux »).
     - q24 n'est **pas stable** : juste en apparence dans `answers_heldout_v4.md`, mais avec l'exception inversée dans la comparaison faite le même jour (l'alerte « négation » l'avait signalée).
     - Les temps des fichiers de réponses sont faussés par des incidents de la machine (veille pendant q20 de heldout_v4 ; q06 de v4 à 6 tokens/s ; q17 de heldout_v4 bloquée environ 3 min). La mesure de référence est celle de `compare_models.py`.
-    - **Compromis proposé pour le temps, non fait** : des extraits courts (40 mots au plus) et `LLM_MAX_TOKENS` vers 1 200, avec le risque de réponses de nouveau coupées sur les longues listes.
+    - **Compromis de temps, mesuré mais pas adopté** (`eval/results_v2.md`, section 8) : variante du prompt `eval/prompts/short_extracts.txt` (extraits de 40 mots au plus).
+
+      | 32 questions | Médian | Max | Au-delà de 60 s | Coupées |
+      |---|---|---|---|---|
+      | Extraits courts + 2 000 tokens | 37 s | 90 s | 2 | 0 |
+      | Extraits courts + 1 200 tokens | 34 s | 60 s | 1 | 1 (q23, refusée) |
+
+      - Dans les deux cas, le juge s'abstient sur q10, et les réponses passent de 134 à 75 ou 65 mots.
+      - La machine était plus rapide pendant ces mesures (34 tokens/s contre 28).
+      - Choix à faire par l'auteur : la configuration par défaut reste la v4.
     - Réponses à relire : `eval/answers_v4.md` et `eval/answers_heldout_v4.md`.
   - Les vecteurs des questions calculés sur le CPU varient très légèrement d'un lancement à l'autre : ±1 rang possible sur les passages aux scores presque égaux (q16). Répéter les mesures (`compare_retrieval.py --repeat 3`) avant de conclure.
   - Mesure de référence (séance 3, `bge-m3`, chunks de 4 000 caractères au plus) : **hit@1 = 6/10, hit@5 = 7/10**. Échecs : q03 durée de conservation (rang 6, réponse partielle dans le corpus), q04 mention d'information (rang 20), q10 IA générative au travail (art. 4 non trouvé dans les 20 premiers). Les sigles DPO et AIPD passent (rang 1). Pistes à étudier à la séance 5.

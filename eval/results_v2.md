@@ -183,9 +183,59 @@ Risque : des réponses de nouveau coupées sur les longues listes (q04, q23), do
 - **h05** : refusée par le modèle lui-même (« Les textes trouvés ne permettent pas de répondre… »).
 - **q22** : abstention du juge, alors que le corpus contient la réponse (art. 7) : « faux » selon la grille.
 
-## 8. Points ouverts
+## 8. Compromis de temps : extraits courts, 2 000 ou 1 200 tokens
 
-- **Temps** : compromis à valider (section 7).
+Variante du prompt v4 : `eval/prompts/short_extracts.txt`. Une seule phrase change : chaque extrait fait « 40 mots au plus (si la phrase est plus longue, gardez seulement la partie qui répond et remplacez le reste par « … ») ». Commande : `compare_models.py qwen3:4b-instruct --prompt-file eval\prompts\short_extracts.txt`, avec `LLM_MAX_TOKENS=2000` puis `1200`. Mêmes 32 questions (v0, hors sujet, v1), le même jour, sur secteur, juge activé.
+
+| Mesure (32 questions) | v4 | Extraits courts + 2 000 | Extraits courts + 1 200 |
+|---|---|---|---|
+| Réponses données (sur 27) | 26 | 25 | 24 |
+| Abstentions du juge (dans le corpus) | q22 | q10, q22 | q10, q22 |
+| Extrait de l'article attendu | 26 | 27 | 27 |
+| Extrait du paragraphe attendu | 24 | 25 | 25 |
+| Hors sujet refusés (sur 5) | 5 | 5 | 5 |
+| Extraits vérifiés / recopiés | 72 / 79 | 99 / 107 | 103 / 108 |
+| Réponses coupées | 0 | 0 | **1 (q23, refusée)** |
+| Mots écrits (extraits + réponse), moyenne | 342 | 292 | 271 |
+| Mots de réponse (réponses données) | 134 | 75 | 65 |
+| Temps médian (génération + juge) | 40 s | 37 s | **34 s** |
+| Temps maximal | 105 s | 90 s | **60 s** |
+| Questions au-delà de 60 s | 6 / 32 | 2 / 32 | 1 / 32 (q04, 60 s) |
+| tokens/s (moyenne) | 28,3 | 34,2 | 34,2 |
+
+Temps des questions lentes de la v4 (génération et juge ; « coupée » indique une réponse coupée) :
+
+| Question | v4 | Courts + 2 000 | Courts + 1 200 |
+|---|---|---|---|
+| q23 | 105 s | 90 s | 41 s, coupée |
+| q27 | 88 s | 56 s | 51 s |
+| q04 | 88 s | 59 s | 60 s |
+| q11 | 70 s | 55 s | 28 s |
+| q21 | 66 s | 49 s | 46 s |
+| q16 | 63 s | 42 s | 41 s |
+
+**Lecture honnête :**
+- **La machine était plus rapide pendant ces deux mesures** (34 tokens/s, contre 28 pour la v4). Une partie du gain vient donc d'elle. Le volume écrit, lui, baisse vraiment : 342 → 292 → 271 mots, soit −15 % puis −21 %.
+- **Extraits courts + 1 200 tient l'objectif de 60 s**, mais q23 (« Quelles utilisations de l'IA sont interdites ? ») est coupée avant la réponse et devient un refus, donc « faux » selon la grille.
+- **Extraits courts + 2 000 ne coupe rien**, mais q23 prend encore 90 s.
+- **Effet de bord des extraits courts** : le juge s'abstient sur q10 (art. 4, maîtrise de l'IA), qui était partielle en v3. C'est une abstention à tort, donc « faux » selon la grille.
+- **Réponses plus courtes** (134 → 75 mots) : à vérifier par la relecture, car le risque est d'en faire des réponses « partielles ».
+- **Lecture rapide des réponses surveillées**, pas un verdict :
+  - q24 est juste en apparence dans les deux variantes ;
+  - q26 cite enfin la condition d'hypertrucage avec 2 000 tokens, mais pas avec 1 200 ;
+  - q15 reste corrigée ;
+  - q18 reste problématique ;
+  - h05 est arrêtée par le juge.
+
+**Rien n'est adopté** : `src/compliance_copilot/rag.py` et `config.py` gardent la configuration v4. À trancher par l'auteur :
+- **extraits courts + 1 200** si le plafond de 60 s compte d'abord ;
+- **extraits courts + 2 000** si les longues listes comptent d'abord.
+
+Dans les deux cas, le juge s'abstient désormais sur q10.
+
+## 9. Points ouverts
+
+- **Temps** : choisir entre les deux variantes de la section 8.
 - **Limite par article** : avec 2, q18 et q27 perdent le paragraphe utile ; avec 3 ou sans limite, v0 perd q10. Une autre piste générale serait de garder le premier paragraphe d'un article découpé, qui pose souvent la règle, quand un autre de ses paragraphes est retenu.
 - **Juge** : utile sur les hors sujet et sur certaines réponses sans bon article (q15, q18 à la calibration), mais instable, et il coûte des réponses partielles (q16, q22).
 - **Rédaction** (q20, q25, q26) : aucune correction générale dans cette séance.
