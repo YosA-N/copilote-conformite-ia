@@ -32,6 +32,7 @@ class Settings:
     search_lexicon: str = "all"  # "off", "keywords" or "all": add legal wording to the question
     search_max_per_article: int | None = 2  # at most 2 chunks of the same article among the passages
     search_k: int = 5  # passages given to the language model (8 measured at session 6: slower, no gain with the lexicon)
+    search_first_paragraph: bool = True  # add the first paragraph of an article when a later one is kept (session 6)
     answer_judge: bool = True  # second short call: do the verified extracts answer the question directly?
 
 
@@ -57,5 +58,6 @@ def load_settings() -> Settings:
         search_lexicon=os.getenv("SEARCH_LEXICON", "all").strip().lower(),
         search_max_per_article=optional_int(os.getenv("SEARCH_MAX_PER_ARTICLE", "2")),
         search_k=int(os.getenv("SEARCH_K", "5")),
+        search_first_paragraph=os.getenv("SEARCH_FIRST_PARAGRAPH", "on").strip().lower() in {"on", "1", "true", "oui"},
         answer_judge=os.getenv("ANSWER_JUDGE", "on").strip().lower() in {"on", "1", "true", "oui"},
     )

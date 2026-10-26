@@ -20,6 +20,7 @@ from compliance_copilot.rag import (
     flipped_negations,
     found_word_for_word,
     incomplete_case_lists,
+    inverted_rules,
     judge_extracts,
     normalize_citations,
     other_actor_duties,
@@ -409,6 +410,51 @@ def test_q08_v2_inverted_exception_is_flagged():
     flips = flipped_negations(Q08_V2, [AI_ACT_50_1])
 
     assert len(flips) == 1 and flips[0].startswith("sauf si cela ne ressort pas clairement")
+
+
+AI_ACT_5_1_F = (
+    "la mise sur le marché, la mise en service à cette fin spécifique ou l’utilisation de systèmes d’IA pour inférer les émotions "
+    "d’une personne physique sur le lieu de travail et dans les établissements d’enseignement, sauf lorsque l’utilisation du "
+    "système d’IA est destinée à être mise en place ou mise sur le marché pour des raisons médicales ou de sécurité"
+)
+AI_ACT_5_PASSAGE = (
+    "AI Act — règlement (UE) 2024/1689 — Article 5 : Pratiques interdites en matière d’IA\n\n"
+    "1. Les pratiques en matière d’IA suivantes sont interdites:\n"
+    f"f) {AI_ACT_5_1_F};\n"
+    "g) la mise sur le marché de systèmes de catégorisation biométrique;"
+)
+# Non-regression (session 6): the q24 answer of the v4 comparison, which allows what article 5 forbids
+Q24_V4 = (
+    "Oui, vous avez le droit d’utiliser une IA qui analyse les émotions de vos salariés, à condition que l’utilisation ne soit "
+    "pas destinée à être mise en place ou mise sur le marché pour des raisons autres que médicales ou de sécurité [2]."
+)
+
+
+def test_q24_v4_inverted_exception_is_flagged():
+    passages = [passage("autre texte", "AI Act"), passage(AI_ACT_5_PASSAGE, "AI Act")]
+    extracts = [verified(AI_ACT_5_1_F, 2)]
+
+    assert flipped_negations(Q24_V4, [AI_ACT_5_1_F])  # « ne … pas » and « autres que » added
+    assert inverted_rules(Q24_V4, extracts, passages)  # « vous avez le droit » where the list says « sont interdites »
+
+
+def test_inversions_without_ne_pas_are_flagged():
+    for answer in (
+        "Vous ne pouvez pas l'utiliser au travail, sauf lorsque l'utilisation est destinée à des raisons autres que médicales ou de sécurité.",
+        "Vous ne pouvez pas l'utiliser au travail, sauf lorsque l'utilisation du système est destinée à être mise en place hors raisons médicales.",
+    ):
+        assert flipped_negations(answer, [AI_ACT_5_1_F]), answer
+
+
+def test_faithful_q24_answer_is_not_flagged():
+    faithful = (
+        "Non, vous n’avez pas le droit d’utiliser une IA qui analyse les émotions de vos salariés sur le lieu de travail, sauf si "
+        "l’utilisation est destinée à être mise en place ou mise sur le marché pour des raisons médicales ou de sécurité [2]."
+    )
+    passages = [passage("autre texte", "AI Act"), passage(AI_ACT_5_PASSAGE, "AI Act")]
+
+    assert flipped_negations(faithful, [AI_ACT_5_1_F]) == []
+    assert inverted_rules(faithful, [verified(AI_ACT_5_1_F, 2)], passages) == []
 
 
 def test_exception_repeated_with_the_same_meaning_is_not_flagged():

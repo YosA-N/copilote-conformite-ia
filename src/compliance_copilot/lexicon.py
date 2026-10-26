@@ -32,7 +32,8 @@ LEXICON: list[tuple[str, str]] = [
     (r"proteger .*donnees|securi[st]", "sécurité du traitement : mesures techniques et organisationnelles appropriées"),
     (r"prestataire|sous-traitan", "sous-traitant qui traite des données pour le compte du responsable du traitement"),
     (r"etats-unis|hors (de l.)?(ue|union|europe)|pays tiers|a l.etranger", "transfert de données vers un pays tiers, décision d'adéquation, garanties appropriées"),
-    (r"emotion", "systèmes de reconnaissance des émotions, pratiques interdites en matière d'IA"),
+    # the lexicon translates words, it never gives the conclusion: emotion recognition is only forbidden at work and in education
+    (r"emotion", "systèmes de reconnaissance des émotions"),
     (r"amendes?|sanctions?", "amendes administratives"),
 ]
 

@@ -55,7 +55,8 @@ def main() -> int:
     try:
         passages = {
             q.id: fit_passages(q.question, search(q.question, INDEX_DIR, embedder, k=settings.search_k, mode=settings.search_mode,
-                                                  lexicon=settings.search_lexicon, max_per_article=settings.search_max_per_article),
+                                                  lexicon=settings.search_lexicon, max_per_article=settings.search_max_per_article,
+                                                  first_paragraph=settings.search_first_paragraph),
                                chat_models[0])
             for q in questions
         }

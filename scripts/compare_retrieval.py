@@ -20,11 +20,11 @@ from compliance_copilot.evaluation import article_level, first_hit_rank, hit_at_
 from compliance_copilot.index import IndexNotReadyError, search
 
 DEPTH = 20
-CONFIGS = [  # (label, mode, lexicon, at most N chunks of the same article)
-    ("vecteurs seuls (départ)", "vector", "off", None),
-    ("vecteurs + lexique", "vector", "all", None),
-    ("vecteurs + lexique + 2 par article", "vector", "all", 2),
-    ("vecteurs + lexique + 3 par article", "vector", "all", 3),
+CONFIGS = [  # (label, mode, lexicon, at most N chunks of the same article, first paragraph of a split article added)
+    ("vecteurs seuls (départ)", "vector", "off", None, False),
+    ("vecteurs + lexique", "vector", "all", None, False),
+    ("vecteurs + lexique + 2 par article", "vector", "all", 2, False),
+    ("vecteurs + lexique + 2 par article + 1er paragraphe", "vector", "all", 2, True),
 ]
 LEVELS = [("article", True), ("paragraphe", False)]
 SETS = [("v0", "questions_v0.jsonl"), ("v1", "questions_v1.jsonl")]
@@ -61,12 +61,13 @@ def main() -> int:
     for run in range(args.repeat):
         embedder = CachedEmbedder(make_embedder(settings, settings.query_embedding_device))  # fresh vectors each run
         ranks: dict[tuple[str, str, str], list[int | None]] = {}
-        for label, mode, lexicon, limit in CONFIGS:
+        for label, mode, lexicon, limit, first_paragraph in CONFIGS:
             print(f"… mesure {run + 1}/{args.repeat} : {label}", file=sys.stderr, flush=True)
             for name, questions in question_sets.items():
                 try:
                     found = [
-                        [r.id for r in search(q.question, INDEX_DIR, embedder, k=DEPTH, mode=mode, lexicon=lexicon, max_per_article=limit)]
+                        [r.id for r in search(q.question, INDEX_DIR, embedder, k=DEPTH, mode=mode, lexicon=lexicon, max_per_article=limit,
+                                              first_paragraph=first_paragraph)]
                         for q in questions
                     ]
                 except (IndexNotReadyError, EmbeddingError) as error:

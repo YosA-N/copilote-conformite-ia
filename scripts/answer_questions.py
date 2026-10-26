@@ -110,6 +110,7 @@ def main() -> int:
             answer = answer_question(
                 question.question, INDEX_DIR, embedder, chat_model, k=settings.search_k, mode=settings.search_mode,
                 lexicon=settings.search_lexicon, max_per_article=settings.search_max_per_article, judge=settings.answer_judge,
+                first_paragraph=settings.search_first_paragraph,
             )
         except (IndexNotReadyError, EmbeddingError, LLMError) as error:
             print(f"[ERREUR] {error}")
@@ -144,7 +145,8 @@ def main() -> int:
         "règlement non nommé quand la réponse mêle RGPD et AI Act",
         f"- Recherche : `{settings.embedding_model}` (sur {settings.query_embedding_device.upper()}), mode « {settings.search_mode} », "
         f"lexique « {settings.search_lexicon} », {settings.search_k} passages par question, "
-        + (f"{settings.search_max_per_article} au plus par article" if settings.search_max_per_article else "sans limite par article"),
+        + (f"{settings.search_max_per_article} au plus par article" if settings.search_max_per_article else "sans limite par article")
+        + (", 1er paragraphe ajouté quand un paragraphe suivant d'un article découpé est retenu" if settings.search_first_paragraph else ""),
         "- Contrôle de pertinence (juge) : "
         + ("activé ; si le modèle juge que les extraits ne répondent pas directement à la question, la réponse est remplacée par "
            f"« {ABSTENTION} »" if settings.answer_judge else "désactivé"),

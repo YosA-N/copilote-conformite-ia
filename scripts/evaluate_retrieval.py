@@ -59,7 +59,8 @@ def main() -> int:
           f"rang cherché parmi les {DEPTH} premiers passages\n")
     for question in questions:
         try:
-            results = search(question.question, INDEX_DIR, embedder, k=DEPTH, mode=mode, lexicon=lexicon, max_per_article=limit)
+            results = search(question.question, INDEX_DIR, embedder, k=DEPTH, mode=mode, lexicon=lexicon, max_per_article=limit,
+                             first_paragraph=settings.search_first_paragraph)
         except (IndexNotReadyError, EmbeddingError) as error:
             print(f"[ERREUR] {error}")
             return 1

@@ -37,6 +37,7 @@ def main() -> int:
         answer = answer_question(
             question, INDEX_DIR, embedder, chat_model, k=args.k or settings.search_k, on_text=write_now,
             mode=settings.search_mode, lexicon=settings.search_lexicon, max_per_article=settings.search_max_per_article,
+            first_paragraph=settings.search_first_paragraph,
             judge=settings.answer_judge,
         )
     except (IndexNotReadyError, EmbeddingError, LLMError) as error:

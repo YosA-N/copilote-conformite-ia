@@ -7,6 +7,7 @@ An unchanged corpus is therefore never embedded twice.
 
 import hashlib
 import json
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -27,6 +28,7 @@ SEARCH_MODES = ("vector", "hybrid")
 LEXICON_TARGETS = ("off", "keywords", "all")
 HYBRID_CANDIDATES = 50  # chunks taken from each ranking before fusion
 _KEYWORD_INDEXES: dict[tuple, BM25] = {}
+_FIRST_PARAGRAPHS: dict[tuple, dict[str, str]] = {}
 
 
 class IndexNotReadyError(RuntimeError):
@@ -139,9 +141,45 @@ def _keyword_index(index_dir: Path, manifest: dict) -> BM25:
     return _KEYWORD_INDEXES[key]
 
 
+def _first_paragraphs(index_dir: Path, manifest: dict) -> dict[str, str]:
+    """{article: id of its first paragraph} for the articles split into paragraphs, built once per index version."""
+    key = (str(index_dir), manifest["corpus_sha256"], manifest["built_at"])
+    if key not in _FIRST_PARAGRAPHS:
+        ids = open_collection(index_dir).get(include=[])["ids"]
+        firsts: dict[str, str] = {}
+        for chunk_id in sorted(ids):  # 'par_1' < 'par_1_a-e' < 'par_1_f-h'
+            if paragraph_number(chunk_id) == 1:
+                firsts.setdefault(article_of(chunk_id), chunk_id)
+        _FIRST_PARAGRAPHS[key] = firsts
+    return _FIRST_PARAGRAPHS[key]
+
+
 def article_of(chunk_id: str) -> str:
     """'gdpr:art_37:par_1' → 'gdpr:art_37': the article or annex a chunk belongs to."""
     return ":".join(chunk_id.split(":")[:2])
+
+
+def paragraph_number(chunk_id: str) -> int | None:
+    """'gdpr:art_9:par_2_a-i' → 2; None for a whole article, a definition, an annex point or 'par_1-bis'."""
+    parts = chunk_id.split(":")
+    match = re.fullmatch(r"par_(\d+)(?:_[\w-]+)?", parts[2]) if len(parts) > 2 else None
+    return int(match.group(1)) if match else None
+
+
+def with_first_paragraphs(chunk_ids: list[str], first_paragraphs: dict[str, str]) -> list[str]:
+    """After the first kept chunk of an article that is a later paragraph, add the article's first
+    paragraph, which often states the rule (art. 9, § 1: the prohibition), if it is not already there.
+    It comes in second place for its article, or third if two of its chunks were already kept."""
+    kept, present = [], set(chunk_ids)
+    for chunk_id in chunk_ids:
+        kept.append(chunk_id)
+        first = first_paragraphs.get(article_of(chunk_id))
+        part = chunk_id.split(":")[2] if chunk_id.count(":") >= 2 else ""
+        is_later_paragraph = part.startswith("par_") and paragraph_number(chunk_id) != 1  # 'par_3', 'par_1-bis'…
+        if first and first not in present and is_later_paragraph:
+            kept.append(first)
+            present.add(first)
+    return kept
 
 
 def limit_per_article(chunk_ids: list[str], limit: int | None) -> list[str]:
@@ -166,13 +204,15 @@ def search(
     mode: str = "vector",
     lexicon: str = "off",
     max_per_article: int | None = None,
+    first_paragraph: bool = False,
 ) -> list[SearchResult]:
     """The k chunks closest to the question, best first.
 
     mode "vector" ranks by meaning only; "hybrid" also ranks by keywords (BM25) and fuses both
     rankings (RRF). lexicon "keywords" adds legal wording to the keyword query, "all" to both
-    queries. max_per_article keeps at most that many chunks of the same article. The score is
-    always the cosine similarity between the question and the chunk.
+    queries. max_per_article keeps at most that many chunks of the same article; first_paragraph
+    adds the first paragraph of an article when a later one is kept (see with_first_paragraphs).
+    The score is always the cosine similarity between the question and the chunk.
     """
     if mode not in SEARCH_MODES or lexicon not in LEXICON_TARGETS:
         raise ValueError(f"mode doit valoir {SEARCH_MODES} et lexicon {LEXICON_TARGETS}")
@@ -190,23 +230,26 @@ def search(
 
     if mode == "vector":
         candidates = k * 4 if max_per_article else k  # room to skip the extra chunks of an article
-        found = collection.query(query_embeddings=[vector], n_results=candidates, include=["documents", "metadatas", "distances"])
-        rows = dict(zip(found["ids"][0], zip(found["documents"][0], found["metadatas"][0], found["distances"][0])))
-        best = limit_per_article(found["ids"][0], max_per_article)[:k]
-        return [
-            SearchResult(rank=rank, score=1 - rows[chunk_id][2], id=chunk_id, text=rows[chunk_id][0], metadata=rows[chunk_id][1])
-            for rank, chunk_id in enumerate(best, start=1)
-        ]
-
-    by_meaning = collection.query(query_embeddings=[vector], n_results=HYBRID_CANDIDATES, include=[])["ids"][0]
-    by_keywords = [chunk_id for chunk_id, _ in _keyword_index(index_dir, manifest).search(expanded, HYBRID_CANDIDATES)]
-    fused = [chunk_id for chunk_id, _ in reciprocal_rank_fusion([by_meaning, by_keywords])]
-    best = limit_per_article(fused, max_per_article)[:k]
+        found = collection.query(query_embeddings=[vector], n_results=candidates, include=["distances"])
+        ranked = found["ids"][0]
+        distances = dict(zip(ranked, found["distances"][0]))
+    else:
+        distances = {}
+        by_meaning = collection.query(query_embeddings=[vector], n_results=HYBRID_CANDIDATES, include=[])["ids"][0]
+        by_keywords = [chunk_id for chunk_id, _ in _keyword_index(index_dir, manifest).search(expanded, HYBRID_CANDIDATES)]
+        ranked = [chunk_id for chunk_id, _ in reciprocal_rank_fusion([by_meaning, by_keywords])]
+    best = limit_per_article(ranked, max_per_article)
+    if first_paragraph:
+        best = with_first_paragraphs(best, _first_paragraphs(index_dir, manifest))
+    best = best[:k]
     stored = collection.get(ids=best, include=["documents", "metadatas", "embeddings"])
     found = dict(zip(stored["ids"], zip(stored["documents"], stored["metadatas"], stored["embeddings"])))
     results = []
     for rank, chunk_id in enumerate(best, start=1):
         text, metadata, embedding = found[chunk_id]
-        similarity = float(sum(a * b for a, b in zip(vector, embedding)))  # both vectors are normalised
+        if chunk_id in distances:
+            similarity = 1 - distances[chunk_id]
+        else:  # fused ranking or added first paragraph: both vectors are normalised
+            similarity = float(sum(a * b for a, b in zip(vector, embedding)))
         results.append(SearchResult(rank=rank, score=similarity, id=chunk_id, text=text, metadata=metadata))
     return results

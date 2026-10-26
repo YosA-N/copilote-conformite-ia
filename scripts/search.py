@@ -42,7 +42,7 @@ def main() -> int:
     try:
         results = search(
             question, INDEX_DIR, embedder, k=args.k or settings.search_k, mode=settings.search_mode, lexicon=settings.search_lexicon,
-            max_per_article=settings.search_max_per_article,
+            max_per_article=settings.search_max_per_article, first_paragraph=settings.search_first_paragraph,
         )
     except (IndexNotReadyError, EmbeddingError) as error:
         print(f"[ERREUR] {error}")

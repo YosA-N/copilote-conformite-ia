@@ -105,6 +105,11 @@ CLAUSE_NEGATION = re.compile(
 )
 CLAUSE_WORDS = 12  # an exception is compared on its first 12 words…
 LONG_CLAUSE_WORDS = 24  # …with up to 24 words of the extract, so that a shorter wording is not taken for a flip
+# inversions without « ne … pas » (session 6): « pour des raisons autres que médicales » ≠ « pour des raisons médicales »
+CLAUSE_INVERSION = re.compile(r"\bautres? que\b|\bautres? qu['’]|\bhors\b|\bexcept[ée]e?s?\b|\bà l['’]exception\b", re.IGNORECASE)
+INVERSION_WORDS, LONG_INVERSION_WORDS = 30, 40  # an inversion often comes at the end of the exception
+PERMISSION = re.compile(r"^\W*oui\b|\bvous pouvez\b|\bavez le droit\b|\bautorisée?s?\b|\bpermise?s?\b", re.IGNORECASE)
+PROHIBITION = re.compile(r"\binterdite?s?\b|\bne (?:peut|peuvent|pouvez|pourra) (?:pas|être|plus)\b", re.IGNORECASE)
 QUOTE = re.compile(r"«\s*([^«»]+?)\s*»")
 MIN_QUOTE_WORDS = 3  # « déployeur » alone proves nothing
 EXCEPTION_SUPPORT = 0.6  # share of the words of an exception that must come from one extract
@@ -457,9 +462,51 @@ def flipped_negations(text: str, extracts: list[str]) -> list[str]:
             continue
         added = CLAUSE_NEGATION.search(short) and not CLAUSE_NEGATION.search(_first_words(closest, LONG_CLAUSE_WORDS))
         dropped = not CLAUSE_NEGATION.search(short) and CLAUSE_NEGATION.search(_first_words(closest, CLAUSE_WORDS))
-        if added or dropped:
+        inverted = CLAUSE_INVERSION.search(_first_words(clause, INVERSION_WORDS)) and not CLAUSE_INVERSION.search(
+            _first_words(closest, LONG_INVERSION_WORDS)
+        )
+        if added or dropped or inverted:
             flips.append(f"{marker} {short}")
     return flips
+
+
+def _rule_context(extract: Extract, passages: list[SearchResult]) -> str:
+    """The extract and, when it is a point of a list, the line that announces the list
+    (« Les pratiques en matière d'IA suivantes sont interdites: »), which states the rule."""
+    if not extract.passage or extract.passage > len(passages):
+        return extract.text
+    lines = passages[extract.passage - 1].text.split("\n")
+    start = _comparable(_first_words(ELLIPSIS.split(extract.text)[0], 8))
+    index = next((i for i, line in enumerate(lines) if start and start in _comparable(line)), None)
+    if index is None or not LIST_ITEM.match(lines[index]):
+        return extract.text
+    intro = index
+    while intro > 0 and LIST_ITEM.match(lines[intro]):
+        intro -= 1
+    return f"{lines[intro]} {extract.text}"
+
+
+def inverted_rules(text: str, extracts: list[Extract], passages: list[SearchResult]) -> list[str]:
+    """Exceptions repeated faithfully but hung on the opposite rule: « vous avez le droit…, sauf… » when the
+    extract says « … sont interdites: …, sauf… » (or the reverse)."""
+    contexts = [(extract.text, _rule_context(extract, passages)) for extract in extracts if extract.verified]
+    inverted = []
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", text):
+        for match in CONDITION.finditer(sentence):
+            words = set(tokenize(_first_words(sentence[match.end():], CLAUSE_WORDS)))
+            if len(words) < 3:
+                continue
+            prefix = sentence[:match.start()]
+            for extract_text, context in contexts:
+                clauses = [other for _, other in _clauses(extract_text, CONDITION)]
+                if not any(len(words & set(tokenize(_first_words(other, LONG_CLAUSE_WORDS)))) / len(words) >= 0.5 for other in clauses):
+                    continue
+                allows = PERMISSION.search(prefix) and not PROHIBITION.search(prefix)
+                forbids = PROHIBITION.search(prefix) and not PERMISSION.search(prefix)
+                if (allows and PROHIBITION.search(context)) or (forbids and PERMISSION.search(context) and not PROHIBITION.search(context)):
+                    inverted.append(f"{_short(prefix.strip(), 60)} {match.group(0)} …")
+                    break
+    return inverted
 
 
 def quotes_not_in_extracts(text: str, extracts: list[str]) -> list[str]:
@@ -627,11 +674,11 @@ def _warnings(found: int, passages: list[SearchResult], chat_model: ChatModel, g
             )
     for claim in unbacked_absence_claims(answer_text, verified_texts):
         warnings.append(f"La réponse affirme une absence ou une impossibilité qu'aucun extrait ne dit : « {_short(claim)} ». Vérifiez ce point.")
-    flips = flipped_negations(answer_text, verified_texts)
+    flips = flipped_negations(answer_text, verified_texts) + inverted_rules(answer_text, extracts, passages)
     if flips:
         warnings.append(
-            f"La réponse change le sens d'une condition ou d'une exception (négation ajoutée ou retirée par rapport à l'extrait) : "
-            f"« {_short(flips[0])} »{_more(flips)}. Vérifiez ce point."
+            f"La réponse change le sens d'une condition ou d'une exception (négation ou inversion ajoutée ou retirée, ou règle "
+            f"contraire à celle de l'extrait) : « {_short(flips[0])} »{_more(flips)}. Vérifiez ce point."
         )
     missing = quotes_not_in_extracts(answer_text, verified_texts)
     if missing:
@@ -677,10 +724,12 @@ def answer_question(
     lexicon: str = "off",
     max_per_article: int | None = None,
     judge: bool = False,
+    first_paragraph: bool = False,
 ) -> RagAnswer:
     """Search the closest passages, have the model quote them and answer, then check everything."""
     start = time.perf_counter()
-    found = search(question, index_dir, embedder, k=k, mode=mode, lexicon=lexicon, max_per_article=max_per_article)
+    found = search(question, index_dir, embedder, k=k, mode=mode, lexicon=lexicon, max_per_article=max_per_article,
+                   first_paragraph=first_paragraph)
     search_seconds = time.perf_counter() - start
     passages = fit_passages(question, found, chat_model)
     return answer_from_passages(question, passages, chat_model, on_text, search_seconds, found=len(found), judge=judge)
