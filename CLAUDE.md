@@ -36,7 +36,8 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
 - **Base vectorielle** : Chroma 1.5.9, persistante dans `data/index/`, distance cosinus.
   - Télémétrie désactivée et `embedding_function=None` : Chroma ne télécharge jamais son propre modèle.
   - `data/index/manifest.json` garde l'empreinte de `chunks.jsonl` et le nom du modèle : l'index n'est recalculé que s'ils changent. Sous Windows, on supprime la collection, jamais le dossier (fichiers verrouillés).
-- **Recherche retenue (séance 5)** : vecteurs `bge-m3` + **lexique** (`lexicon.py`, `SEARCH_LEXICON=all`), qui ajoute à la question le vocabulaire juridique des mots courants. Les entrées du lexique viennent de v0 seulement, jamais de v1.
+- **Recherche retenue (séance 5)** : vecteurs `bge-m3` + **lexique** (`lexicon.py`, `SEARCH_LEXICON=all`), qui ajoute à la question le vocabulaire juridique des mots courants. Les entrées viennent de v0 et, depuis la séance 6, partie 2, aussi des échecs de v1 (7 entrées générales : santé, prospection, sécurité, prestataire, pays tiers, émotions, amendes). Jamais de `questions_v2.jsonl`.
+  - **5 passages** donnés au modèle (`SEARCH_K=5`). 8 ont été mesurés à la séance 6 : plus lent (48 s médian, 93 s max), 5 questions sur 32 perdaient des passages faute de contexte, et rien de plus n'était trouvé une fois le nouveau lexique en place.
   - Recherche hybride vecteurs + BM25 (`lexical.py`, fusion RRF) testée puis rejetée : moins bonne sur v1 ; disponible avec `SEARCH_MODE=hybrid`.
   - **Au plus 2 passages d'un même article** (séance 5 bis, `SEARCH_MAX_PER_ARTICLE=2`, `limit_per_article` dans `index.py`) : la recherche prend 4 × k candidats, puis écarte le 3e morceau d'un article et les suivants. Cause générale corrigée : un long article découpé en paragraphes occupait tout le top 5 (q10 : art. 50 ×2 et art. 26 ×3, art. 4 au rang 7).
 - **Évaluation** : `eval/questions_v0.jsonl` (10 questions types, articles attendus vérifiés dans le texte), mesurée par `evaluate_retrieval.py` (hit@1, hit@5, rang du premier article attendu). On mesure d'abord ; on ne retouche pas les questions pour améliorer le score.
@@ -53,7 +54,29 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
     - Articles attendus vérifiés en lisant le corpus, jamais avec la recherche ni le modèle.
     - **Ni lues ni utilisées avant la toute fin du projet** : aucune réponse générée, aucune mesure ; seul un test de format les ouvre.
     - Écrites par Claude, qui connaît les points faibles du système (risque de biais). L'auteur ajoutera à la fin 5 questions à lui dans `eval/questions_author.jsonl` ; `answer_questions.py --questions` et `review_summary.py --check` acceptent ce fichier.
-  - **Réponses de la v3 aux 20 questions v1** : `eval/answers_heldout_v3.md` (séance 6, partie 1, à relire par l'auteur dans `eval/reviews/heldout_v3.jsonl`), produites par `answer_questions.py --questions eval\questions_v1.jsonl --version heldout_v3`.
+  - **Réponses de la v3 aux 20 questions v1** : `eval/answers_heldout_v3.md`, relues par l'auteur. Résultat : **6 justes, 5 partiels, 5 faux, 4 dangereux**, contre 10 justes sur 12 pour les questions v0 qui avaient servi au réglage (sur-apprentissage).
+  - **Séance 6, partie 2** (`eval/results_v2.md`).
+    - **Diagnostic de heldout_v3** : 6 erreurs viennent de la recherche (dont 3 des 4 dangereuses), 6 de la rédaction (dont q26, dangereuse), 1 de la longueur, 1 est un hors sujet traité. Quand le bon article manque, le modèle répond avec assurance.
+    - Un seuil sur le score de la recherche ne permet pas de s'abstenir : q24, dangereuse, a 0,673.
+  - **Mesure au niveau du paragraphe** : dans `expected` des questions v0 et v1, le paragraphe utile est précisé quand l'article est découpé (3 questions v0, 9 questions v1). `article_level()` ramène les références à l'article, si bien que les chiffres anciens ne changent pas. Un morceau découpé par points (`par_2_a-i`) compte pour son paragraphe (`par_2`).
+  - **Recherche après le nouveau lexique** (`compare_retrieval.py --repeat 3`) : v0 hit@5 10/10 ; v1 hit@5 **17/17** au niveau article (avant 13/17) et **15/17** au niveau paragraphe (avant 11/17). Ces chiffres sont optimistes sur v1, d'où viennent les entrées.
+    - La limite de 2 par article est gardée : avec 3 ou sans limite, v0 tombe à 9/10.
+    - Coût connu de cette limite : q18 (art. 9, § 1) et q27 (art. 99, § 4 et § 6) restent hors des 5 passages.
+  - **Juge d'abstention** (`judge_extracts`, `ANSWER_JUDGE=on`) : un second appel court répond OUI ou NON (« ces extraits répondent-ils directement à la question ? ») ; si c'est NON, la réponse est remplacée par `ABSTENTION`.
+    - Calibrage sur les 32 réponses relues : 0 abstention sur 12 justes, 2 sur 4 dangereuses (q15, q18), h05 (hors sujet) arrêtée, mais 2 réponses partielles (q16, q22) deviennent des abstentions, donc « faux » selon la grille.
+    - Le juge n'est pas stable : sur q18, NON sur une réponse, OUI sur une réponse presque identique.
+    - Médiane 4,5 s.
+  - **Effets séparés sur les réponses dangereuses** : 8 passages corrigent q15 ; le juge seul arrête q15, q18 et h05. Rien ne corrige q24 : le 8e passage est retiré faute de place, et c'est le lexique qui la règle. Rien ne corrige q26 (erreur de rédaction).
+  - **Configuration complète v4** :
+    - réglages : nouveau lexique, 5 passages, limite de 2, juge, `LLM_MAX_TOKENS=2000` ;
+    - prompt : règle « un extrait de chaque passage » retirée, consigne d'abstention ajoutée.
+    - Sur 32 questions : 26 réponses sur 27 avec un extrait de l'article attendu (v3 : 22), 5 hors sujet refusés sur 5, aucune réponse coupée, 1 abstention (q22).
+    - **Temps : génération et juge médians 40 s, maximum 105 s ; 6 questions sur 32 dépassent 60 s** (longs extraits).
+    - Lecture rapide de Claude, pas un verdict : q15 corrigée ; q18 toujours problématique (§ 1 et § 2 absents) ; q26 sans la condition d'hypertrucage ; h05 refusée ; q22 abstention (donc « faux »).
+    - q24 n'est **pas stable** : juste en apparence dans `answers_heldout_v4.md`, mais avec l'exception inversée dans la comparaison faite le même jour (l'alerte « négation » l'avait signalée).
+    - Les temps des fichiers de réponses sont faussés par des incidents de la machine (veille pendant q20 de heldout_v4 ; q06 de v4 à 6 tokens/s ; q17 de heldout_v4 bloquée environ 3 min). La mesure de référence est celle de `compare_models.py`.
+    - **Compromis proposé pour le temps, non fait** : des extraits courts (40 mots au plus) et `LLM_MAX_TOKENS` vers 1 200, avec le risque de réponses de nouveau coupées sur les longues listes.
+    - Réponses à relire : `eval/answers_v4.md` et `eval/answers_heldout_v4.md`.
   - Les vecteurs des questions calculés sur le CPU varient très légèrement d'un lancement à l'autre : ±1 rang possible sur les passages aux scores presque égaux (q16). Répéter les mesures (`compare_retrieval.py --repeat 3`) avant de conclure.
   - Mesure de référence (séance 3, `bge-m3`, chunks de 4 000 caractères au plus) : **hit@1 = 6/10, hit@5 = 7/10**. Échecs : q03 durée de conservation (rang 6, réponse partielle dans le corpus), q04 mention d'information (rang 20), q10 IA générative au travail (art. 4 non trouvé dans les 20 premiers). Les sigles DPO et AIPD passent (rang 1). Pistes à étudier à la séance 5.
   - Séance 5 (meilleure configuration) : v0 **hit@1 = 7/10, hit@5 = 9/10** ; v1 **hit@1 = 10/17, hit@5 = 13/17** (départ v1 : 9/17 et 11–12/17). q10 (art. 4) et q21 (art. 32) restent hors des 5 premiers.
@@ -62,7 +85,7 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
   - q10 v2 cite bien l'art. 4, mais présente l'obligation des fournisseurs (art. 50, § 1) comme celle de l'utilisateur, et finit par une phrase sans [n] ni extrait, non signalée. Autres points ouverts (q06, q08, q03) : `eval/results_v1.md`, section 7.6.
 - **Génération** : petit modèle via Ollama, derrière une **interface interchangeable** : changer de modèle = modifier une ligne dans `.env`. Par défaut : **`qwen3:4b-instruct`** (séance 5 ; avant : `ministral-3:3b`).
   - Comparaison sur les mêmes passages (`compare_models.py`, 32 questions) : qwen recopie 79 extraits sur 83 mot pour mot (ministral : 45 sur 88), refuse les 5 questions hors sujet (ministral : 2), mais il est environ 5 s plus lent par réponse.
-  - Interface `ChatModel` dans `llm.py` (`/api/chat` en streaming). Réglages dans `.env` : `LLM_NUM_CTX`, `LLM_NUM_GPU`, `LLM_TEMPERATURE=0.1`, `LLM_MAX_TOKENS=1500` (place pour les extraits puis la réponse).
+  - Interface `ChatModel` dans `llm.py` (`/api/chat` en streaming). Réglages dans `.env` : `LLM_NUM_CTX`, `LLM_NUM_GPU`, `LLM_TEMPERATURE=0.1`, `LLM_MAX_TOKENS=2000` (place pour les extraits puis la réponse ; 1 500 jusqu'à la séance 6), `ANSWER_JUDGE=on`.
   - **Génération fidèle (séance 5)** : le modèle écrit `EXTRAITS :` (phrases exactes des passages), puis `RÉPONSE :` à partir de ces phrases seulement.
     - Le code vérifie chaque extrait **mot pour mot** dans le passage cité (tolérés : espaces, apostrophes, guillemets, majuscules, coupures « … » ou retour à la ligne ; 6 mots au moins).
     - Sans extrait vérifié, la réponse devient « Les textes trouvés ne permettent pas de répondre à cette question. », sans alerte « aucune citation ». En streaming, la réponse n'apparaît qu'après la vérification de ses extraits.
