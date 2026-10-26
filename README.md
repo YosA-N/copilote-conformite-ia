@@ -106,7 +106,7 @@ Chaque version est relue par un humain avec la même grille, décrite dans `eval
 | v0 (séance 4) | 5 | 1 | 3 | 3 |
 | v1 (séance 5) | 9 | 2 | 0 | 1 |
 | v2 (séance 5 bis) | 6 | 5 | 0 | 1 |
-| v3 (séance 5 ter) | 10 | 2 | 0 | 0 |
+| v3 (séance 5 ter) | 9 | 3 | 0 | 0 |
 
 Ces chiffres portent sur les 12 questions qui ont servi à régler le système : ils sont donc optimistes. Un examen final de 20 nouvelles questions (`eval/questions_v2.jsonl`) est mis de côté et ne sera utilisé qu'à la fin du projet.
 

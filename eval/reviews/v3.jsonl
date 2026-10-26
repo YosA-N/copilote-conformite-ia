@@ -1,6 +1,6 @@
 {"id": "q01", "verdict": "juste", "comment": ""}
 {"id": "q02", "verdict": "juste", "comment": ""}
-{"id": "q03", "verdict": "juste", "comment": ""}
+{"id": "q03", "verdict": "partiel", "comment": "Ne signale pas que les durées concrètes viennent d'autres textes, alors que la couverture est partielle : reclassé selon la grille, même règle que v4."}
 {"id": "q04", "verdict": "partiel", "comment": "Contenu juste, mais réponse coupée à 1 500 tokens."}
 {"id": "q05", "verdict": "juste", "comment": ""}
 {"id": "q06", "verdict": "juste", "comment": ""}

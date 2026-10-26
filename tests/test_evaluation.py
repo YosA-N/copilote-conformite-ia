@@ -141,7 +141,7 @@ AUTHOR_TOTALS = {
     "v0": {"juste": 5, "partiel": 1, "faux": 3, "dangereux": 3},
     "v1": {"juste": 9, "partiel": 2, "faux": 0, "dangereux": 1},
     "v2": {"juste": 6, "partiel": 5, "faux": 0, "dangereux": 1},
-    "v3": {"juste": 10, "partiel": 2, "faux": 0, "dangereux": 0},
+    "v3": {"juste": 9, "partiel": 3, "faux": 0, "dangereux": 0},  # q03 reclassified "partiel" (same rule as v4)
 }
 
 

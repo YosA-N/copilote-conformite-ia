@@ -11,8 +11,14 @@ Commande : `scripts/review_summary.py --check`.
 | v0 (séance 4) | 12 | 5 | 1 | 3 | 3 |
 | v1 (séance 5) | 12 | 9 | 2 | 0 | 1 |
 | v2 (séance 5 bis) | 12 | 6 | 5 | 0 | 1 |
-| v3 (séance 5 ter), questions v0 | 12 | **10** | 2 | 0 | 0 |
+| v3 (séance 5 ter), questions v0 | 12 | **9** | 3 | 0 | 0 |
 | **heldout_v3** : même configuration, questions v1 | 20 | **6** | 5 | 5 | **4** |
+| v4 (séance 6), questions v0 | 12 | 8 | 2 | 0 | 2 |
+| heldout_v4 : même configuration, questions v1 | 20 | 9 | 3 | 4 | 4 |
+
+Les lignes v4 et heldout_v4 sont détaillées en section 11. Reclassements selon la grille, décidés par l'auteur :
+- v0 q01 et v2 q08 sont devenues « dangereux » (partie 1) ;
+- v3 q03 est devenue « partiel » au lieu de « juste », pour la même règle que v4 : la couverture est partielle et la réponse ne dit pas que les durées concrètes viennent d'autres textes.
 
 La v3 paraît bonne sur les questions qui ont servi à la régler (v0), mais pas sur les questions v1 : c'est du **sur-apprentissage** (**overfitting**).
 
@@ -304,6 +310,45 @@ L'objectif d'environ 60 s n'est pas tenu pour les 4 réponses les plus longues. 
 - **q26** : l'hypertrucage est cité, mais rattaché à l'exception artistique au lieu de conditionner l'obligation.
 - **h03, h04, h05** : refusées.
 - **Abstentions** : q22 et q24.
+
+## 11. Relecture des réponses v4 (`eval/reviews/v4.jsonl`, `eval/reviews/heldout_v4.jsonl`)
+
+Commande : `scripts/review_summary.py --check`.
+
+| Version | Questions | Juste | Partiel | Faux | Dangereux |
+|---|---|---|---|---|---|
+| v0 | 12 | 5 | 1 | 3 | 3 |
+| v1 | 12 | 9 | 2 | 0 | 1 |
+| v2 | 12 | 6 | 5 | 0 | 1 |
+| v3 | 12 | 9 | 3 | 0 | 0 |
+| **v4** | 12 | **8** | 2 | 0 | **2** |
+| heldout_v3 | 20 | 6 | 5 | 5 | 4 |
+| **heldout_v4** | 20 | **9** | 3 | 4 | **4** |
+
+Questions qui ne sont pas justes :
+- **v4** : partiel q03, q10 · dangereux q01, q07 ;
+- **heldout_v4** : partiel q12, q23, q27 · faux q20, q22, q24, q25 · dangereux q14, q16, q18, q26.
+
+**Évolution, question par question** (relectures de l'auteur) :
+- **questions v1** (heldout_v3 → heldout_v4) : 6 → 9 justes, mais **toujours 4 dangereuses**.
+  - Progrès :
+    - q15 (dangereux → juste) ;
+    - q21 (partiel → juste) ;
+    - h05 (faux → juste) ;
+    - q24 (dangereux → faux : abstention, sans danger) ;
+    - q27 (faux → partiel).
+  - Reculs :
+    - q14 (faux → dangereux : opposition à la prospection soumise à des « raisons tenant à la situation particulière ») ;
+    - q16 (partiel → dangereux : « les États-Unis n'ont pas de décision d'adéquation », fait inventé, absent des passages et faux depuis 2023 ; le contrôle d'absence ne l'a pas vu) ;
+    - q22 (partiel → faux : abstention du juge).
+  - Toujours dangereuses, mais autrement :
+    - q18 : « Non, interdit », sans les exceptions de l'art. 9, § 2 ;
+    - q26 : obligation pour toute image.
+- **questions v0** (v3 → v4) : 9 → 8 justes, et **2 dangereuses** alors que la v3 n'en avait aucune.
+  - q01 (juste → dangereux : « une AIPD suppose que le DPO a été désigné ») ;
+  - q07 (juste → dangereux : l'AIPD confondue avec l'analyse d'impact de l'art. 27 de l'AI Act) ;
+  - q03 (partiel dans les deux versions : en v3, elle ne signalait pas non plus que les durées concrètes viennent d'autres textes ; reclassée de « juste » à « partiel » selon la grille, même règle que v4) ;
+  - q04 (partiel → juste).
 - **Limite par article** : avec 2, q18 et q27 perdent le paragraphe utile ; avec 3 ou sans limite, v0 perd q10. Une autre piste générale serait de garder le premier paragraphe d'un article découpé, qui pose souvent la règle, quand un autre de ses paragraphes est retenu.
 - **Juge** : utile sur les hors sujet et sur certaines réponses sans bon article (q15, q18 à la calibration), mais instable, et il coûte des réponses partielles (q16, q22).
 - **Rédaction** (q20, q25, q26) : aucune correction générale dans cette séance.

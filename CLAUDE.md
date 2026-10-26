@@ -49,12 +49,12 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
     - Cas limites validés par l'auteur : en cas de doute, le plus sévère ; hors sujet traité = faux ; refus alors que le corpus répond = faux ; réponse coupée = partiel ; on juge la réponse affichée, pas les alertes.
     - Relectures structurées dans `eval/reviews/<version>.jsonl` (`id`, `verdict`, `comment`), comptées par `scripts/review_summary.py` (option `--check` : chaque relecture couvre exactement les questions de `eval/answers_<version>.md`). Les `review_v*.md` restent pour le détail.
     - Reclassement selon la grille, décidé par l'auteur : v0 q01 (obligation inventée) et v2 q08 (exception inversée) deviennent « dangereux ».
-    - Verdicts (juste / partiel / faux / dangereux) : v0 5/1/3/3 ; v1 9/2/0/1 ; v2 6/5/0/1 ; **v3 10/2/0/0** (meilleure version relue).
+    - Verdicts (juste / partiel / faux / dangereux) : v0 5/1/3/3 ; v1 9/2/0/1 ; v2 6/5/0/1 ; **v3 9/3/0/0** (q03 reclassée « partiel » ensuite, même règle que v4) ; v4 8/2/0/2 ; heldout_v3 6/5/5/4 ; heldout_v4 9/3/4/4.
   - **Examen final (séance 6)** : `eval/questions_v2.jsonl`, 20 questions (12 RGPD, 5 AI Act, 3 hors sujet), figées au commit `65ee0c4` avant tout autre changement de la séance 6.
     - Articles attendus vérifiés en lisant le corpus, jamais avec la recherche ni le modèle.
     - **Ni lues ni utilisées avant la toute fin du projet** : aucune réponse générée, aucune mesure ; seul un test de format les ouvre.
     - Écrites par Claude, qui connaît les points faibles du système (risque de biais). L'auteur ajoutera à la fin 5 questions à lui dans `eval/questions_author.jsonl` ; `answer_questions.py --questions` et `review_summary.py --check` acceptent ce fichier.
-  - **Réponses de la v3 aux 20 questions v1** : `eval/answers_heldout_v3.md`, relues par l'auteur. Résultat : **6 justes, 5 partiels, 5 faux, 4 dangereux**, contre 10 justes sur 12 pour les questions v0 qui avaient servi au réglage (sur-apprentissage).
+  - **Réponses de la v3 aux 20 questions v1** : `eval/answers_heldout_v3.md`, relues par l'auteur. Résultat : **6 justes, 5 partiels, 5 faux, 4 dangereux**, contre 9 justes sur 12 (10 avant le reclassement de q03) pour les questions v0 qui avaient servi au réglage (sur-apprentissage).
   - **Séance 6, partie 2** (`eval/results_v2.md`).
     - **Diagnostic de heldout_v3** : 6 erreurs viennent de la recherche (dont 3 des 4 dangereuses), 6 de la rédaction (dont q26, dangereuse), 1 de la longueur, 1 est un hors sujet traité. Quand le bon article manque, le modèle répond avec assurance.
     - Un seuil sur le score de la recherche ne permet pas de s'abstenir : q24, dangereuse, a 0,673.
