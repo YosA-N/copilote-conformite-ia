@@ -75,7 +75,22 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
     - Lecture rapide de Claude, pas un verdict : q15 corrigée ; q18 toujours problématique (§ 1 et § 2 absents) ; q26 sans la condition d'hypertrucage ; h05 refusée ; q22 abstention (donc « faux »).
     - q24 n'est **pas stable** : juste en apparence dans `answers_heldout_v4.md`, mais avec l'exception inversée dans la comparaison faite le même jour (l'alerte « négation » l'avait signalée).
     - Les temps des fichiers de réponses sont faussés par des incidents de la machine (veille pendant q20 de heldout_v4 ; q06 de v4 à 6 tokens/s ; q17 de heldout_v4 bloquée environ 3 min). La mesure de référence est celle de `compare_models.py`.
-    - **Compromis de temps, mesuré mais pas adopté** (`eval/results_v2.md`, section 8) : variante du prompt `eval/prompts/short_extracts.txt` (extraits de 40 mots au plus).
+    - **Compromis de temps** (`eval/results_v2.md`, section 8) : variante du prompt `eval/prompts/short_extracts.txt` (extraits de 40 mots au plus).
+    - **Décision de l'auteur** : 2 000 tokens, et extraits courts gardés seulement s'ils ne réduisent ni les extraits vérifiés ni la complétude. **Critère non rempli, donc retour aux extraits normaux** : 4 questions perdent des extraits vérifiés, 11 réponses raccourcissent de plus de 40 %, q10 devient une abstention, et q06 a une liste incomplète.
+    - **Configuration retenue = v4** ; `answers_v4.md` et `answers_heldout_v4.md` ont été régénérées pour la relecture (temps : `eval/results_v2.md`, section 10).
+  - **Trois corrections générales demandées par l'auteur avant les réponses finales** (`eval/results_v2.md`, section 10) :
+    - **Lexique neutre** : « émotions » → « systèmes de reconnaissance des émotions », sans « pratiques interdites », car le lexique traduit et ne conclut pas. Coût mesuré : q24 retombe au rang 10, et v1 passe de 17 à 16/17 au niveau article.
+    - **1er paragraphe d'un article découpé** (`SEARCH_FIRST_PARAGRAPH=on`, `with_first_paragraphs` dans `index.py`) : il est ajouté quand un paragraphe suivant est retenu, dans la limite de 2 par article ou en 3e position.
+      - Retenu : v0 10/10, v1 16/17 au niveau article (inchangés), et v1 de 14 à 15/17 au niveau paragraphe (q18 : § 2 au rang 2).
+      - q27 n'en profite pas.
+    - **Contrôle de négation étendu** :
+      - inversions sans « ne … pas » (« autres que », « hors », « excepté », « à l'exception de ») ;
+      - règle contraire (`inverted_rules`) : « vous avez le droit…, sauf… » devant une liste annoncée « … sont interdites : ».
+      - Test de non-régression : la phrase inversée de q24 (v4).
+      - Aucune nouvelle fausse alerte sur 224 réponses rejouées.
+  - **Réponses finales à relire** : `eval/answers_v4.md` et `eval/answers_heldout_v4.md` (configuration finale v4 avec ces trois corrections, sur secteur, sans incident).
+    - **Temps sur les 32 questions** (recherche, génération et juge) : **médian 39 s, max 89 s, 4 questions au-delà de 60 s** (q04, q23, q21, q27).
+    - Lecture rapide de Claude, pas un verdict : q15 juste ; q18 passe à « Non… interdit », trop restrictive (sans les exceptions de l'art. 9, § 2) ; q24 devient une abstention (art. 5 non trouvé avec le lexique neutre) ; q26 cite l'hypertrucage mais le rattache mal ; h03 à h05 refusées ; abstentions q22 et q24.
 
       | 32 questions | Médian | Max | Au-delà de 60 s | Coupées |
       |---|---|---|---|---|
@@ -84,7 +99,7 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
 
       - Dans les deux cas, le juge s'abstient sur q10, et les réponses passent de 134 à 75 ou 65 mots.
       - La machine était plus rapide pendant ces mesures (34 tokens/s contre 28).
-      - Choix à faire par l'auteur : la configuration par défaut reste la v4.
+      - Choix de l'auteur : 2 000 tokens, pour ne couper aucune réponse.
     - Réponses à relire : `eval/answers_v4.md` et `eval/answers_heldout_v4.md`.
   - Les vecteurs des questions calculés sur le CPU varient très légèrement d'un lancement à l'autre : ±1 rang possible sur les passages aux scores presque égaux (q16). Répéter les mesures (`compare_retrieval.py --repeat 3`) avant de conclure.
   - Mesure de référence (séance 3, `bge-m3`, chunks de 4 000 caractères au plus) : **hit@1 = 6/10, hit@5 = 7/10**. Échecs : q03 durée de conservation (rang 6, réponse partielle dans le corpus), q04 mention d'information (rang 20), q10 IA générative au travail (art. 4 non trouvé dans les 20 premiers). Les sigles DPO et AIPD passent (rang 1). Pistes à étudier à la séance 5.
