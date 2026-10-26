@@ -8,6 +8,7 @@ from compliance_copilot.config import EVAL_DIR
 from compliance_copilot.evaluation import (
     ReviewError,
     answered_question_ids,
+    article_level,
     describe_reference,
     first_hit_rank,
     hit_at_k,
@@ -27,6 +28,29 @@ def test_a_reference_matches_its_whole_article_and_nothing_else():
     assert not matches("gdpr:art_37", "gdpr:art_3")
     assert not matches("gdpr:art_3", "gdpr:art_37")
     assert not matches("ai_act:anx_III:pt_4", "ai_act:anx_III:pt_1")
+
+
+def test_a_paragraph_reference_matches_its_points_but_not_other_paragraphs():
+    assert matches("gdpr:art_9:par_2_a-i", "gdpr:art_9:par_2")
+    assert matches("ai_act:art_5:par_1_f-h", "ai_act:art_5:par_1")
+    assert not matches("ai_act:art_5:par_1-bis", "ai_act:art_5:par_1")
+    assert not matches("gdpr:art_12:par_10", "gdpr:art_12:par_1")
+    assert not matches("gdpr:art_9:par_3", "gdpr:art_9:par_1")
+
+
+def test_article_level_gives_back_the_articles_measured_before_session_6():
+    assert article_level(["gdpr:art_9:par_1", "gdpr:art_9:par_2"]) == ["gdpr:art_9"]
+    assert article_level(["ai_act:art_5:par_1_f-h"]) == ["ai_act:art_5"]
+    assert article_level(["ai_act:anx_III:pt_4", "ai_act:art_26"]) == ["ai_act:anx_III:pt_4", "ai_act:art_26"]
+    assert article_level(["gdpr:art_4:def_1"]) == ["gdpr:art_4"]
+
+
+def test_paragraph_level_is_stricter_for_q18():
+    q18 = next(q for q in load_questions(EVAL_DIR / "questions_v1.jsonl") if q.id == "q18")
+    results = ["gdpr:art_9:par_3", "gdpr:art_12:par_1", "gdpr:art_9:par_2_a-i"]  # the § 3 first, as in heldout_v3
+
+    assert first_hit_rank(results, article_level(q18.expected)) == 1
+    assert first_hit_rank(results, q18.expected) == 3
 
 
 def test_first_hit_rank_and_hit_at_k():

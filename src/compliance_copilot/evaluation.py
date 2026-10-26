@@ -77,8 +77,23 @@ def answered_question_ids(answers_path: Path) -> list[str]:
 
 
 def matches(chunk_id: str, reference: str) -> bool:
-    """True if the chunk belongs to the referenced article, annex or part ("gdpr:art_3" ≠ "gdpr:art_37")."""
-    return chunk_id == reference or chunk_id.startswith(reference + ":")
+    """True if the chunk belongs to the referenced article, annex or part ("gdpr:art_3" ≠ "gdpr:art_37").
+
+    A paragraph split by points belongs to its paragraph: "gdpr:art_9:par_2_a-i" matches "gdpr:art_9:par_2"
+    (but "ai_act:art_5:par_1-bis" is another paragraph than "ai_act:art_5:par_1")."""
+    return chunk_id == reference or chunk_id.startswith(reference + ":") or chunk_id.startswith(reference + "_")
+
+
+def reference_unit(reference: str) -> str:
+    """The article (or the annex point) of a reference: 'gdpr:art_9:par_1' → 'gdpr:art_9';
+    'ai_act:anx_III:pt_4' stays as it is, an annex point being the unit of the annexes."""
+    parts = reference.split(":")
+    return ":".join(parts[:3] if parts[1].startswith("anx_") else parts[:2])
+
+
+def article_level(expected: list[str]) -> list[str]:
+    """The expected references at the article level, as measured before paragraphs were named (session 6)."""
+    return list(dict.fromkeys(reference_unit(reference) for reference in expected))
 
 
 def first_hit_rank(result_ids: list[str], expected: list[str]) -> int | None:
