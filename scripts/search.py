@@ -33,7 +33,7 @@ def excerpt(result: SearchResult) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Cherche les passages les plus proches d'une question.")
     parser.add_argument("question", nargs="+", help="la question, de préférence entre guillemets")
-    parser.add_argument("-k", type=int, default=5, help="nombre de passages à afficher (5 par défaut)")
+    parser.add_argument("-k", type=int, help="nombre de passages à afficher (par défaut : SEARCH_K du .env)")
     args = parser.parse_args()
     question = " ".join(args.question)
 
@@ -41,7 +41,7 @@ def main() -> int:
     embedder = make_embedder(settings, settings.query_embedding_device)
     try:
         results = search(
-            question, INDEX_DIR, embedder, k=args.k, mode=settings.search_mode, lexicon=settings.search_lexicon,
+            question, INDEX_DIR, embedder, k=args.k or settings.search_k, mode=settings.search_mode, lexicon=settings.search_lexicon,
             max_per_article=settings.search_max_per_article,
         )
     except (IndexNotReadyError, EmbeddingError) as error:

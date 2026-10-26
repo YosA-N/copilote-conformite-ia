@@ -4,7 +4,9 @@ import pytest
 from conftest import FakeChatModel
 
 from compliance_copilot.index import SearchResult, search
+from compliance_copilot.llm import Generation
 from compliance_copilot.rag import (
+    ABSTENTION,
     DISCLAIMER,
     REFUSAL,
     SYSTEM_PROMPT,
@@ -18,6 +20,7 @@ from compliance_copilot.rag import (
     flipped_negations,
     found_word_for_word,
     incomplete_case_lists,
+    judge_extracts,
     normalize_citations,
     other_actor_duties,
     parse_extracts,
@@ -64,6 +67,7 @@ def test_prompt_gives_the_rules_and_numbers_the_passages_in_order(passages):
         "Ne réunissez jamais sous un même nom deux obligations de textes différents",
         "reprenez-les tous dans la réponse",  # lists of cases a), b), c)…
         "six extraits au plus",
+        ABSTENTION,  # a neighbouring subject is not a direct answer (session 6)
     ):
         assert rule in SYSTEM_PROMPT
     assert not SYSTEM_PROMPT.startswith("Tu ")  # the prompt itself says "vous" to the model
@@ -476,6 +480,80 @@ def test_q08_v2_answer_gets_the_new_alerts():
     assert any("change le sens d'une condition ou d'une exception" in warning for warning in answer.warnings)
     assert any("sans nommer cet acteur" in warning for warning in answer.warnings)
     assert not any("formule une exception" in warning for warning in answer.warnings)  # the flip is reported once
+
+
+# ---------------------------------------------------------------- relevance check by the model (session 6)
+
+
+class ScriptedChatModel(FakeChatModel):
+    """Answers the first call with the reply, then the judge's calls with the given verdicts."""
+
+    def __init__(self, reply: str, verdicts: list[str]):
+        super().__init__(reply=reply)
+        self.verdicts = list(verdicts)
+        self.calls: list[list[dict]] = []
+
+    def generate(self, messages, on_text=None) -> Generation:
+        self.calls.append(messages)
+        if len(self.calls) == 1:
+            return super().generate(messages, on_text)
+        return Generation(self.verdicts.pop(0), prompt_tokens=50, completion_tokens=1, seconds=0.1, tokens_per_second=10.0, truncated=False)
+
+
+def test_judge_verdicts_are_parsed():
+    for verdict, expected in (("OUI", True), ("Non.", False), ("**NON**", False), ("oui, ils répondent", True), ("Peut-être", None)):
+        model = ScriptedChatModel("", [verdict])
+        model.calls.append([])  # skip the answer call: the next call is the judge's
+        assert judge_extracts(QUESTION, [ARTICLE_37], model) is expected, verdict
+        system, user = model.calls[-1]
+        assert "OUI ou NON" in system["content"] and ARTICLE_37 in user["content"] and QUESTION in user["content"]
+
+
+def test_judge_no_replaces_the_answer_by_an_abstention_and_keeps_the_sources(passages):
+    model = ScriptedChatModel(GOOD_REPLY, ["NON"])
+
+    answer = answer_from_passages(QUESTION, passages, model, judge=True)
+
+    assert answer.abstained and answer.judgment is False and not answer.refused
+    assert answer.text == ABSTENTION
+    assert len(answer.sources) == len(passages) and not any(source.cited for source in answer.sources)
+    assert any("Contrôle de pertinence" in warning for warning in answer.warnings)
+    footer = render_footer(answer)
+    assert "Extraits vérifiés" not in footer and "Passages consultés mais non cités" in footer
+    assert "Oui, dans certains cas" in answer.raw_text  # the model's answer stays in the raw text
+
+
+def test_judge_yes_keeps_the_answer(passages):
+    answer = answer_from_passages(QUESTION, passages, ScriptedChatModel(GOOD_REPLY, ["OUI"]), judge=True)
+
+    assert not answer.abstained and answer.judgment is True
+    assert answer.text.startswith("Oui, dans certains cas")
+    assert not any("pertinence" in warning for warning in answer.warnings)
+
+
+def test_unclear_judge_keeps_the_answer_with_a_warning(passages):
+    answer = answer_from_passages(QUESTION, passages, ScriptedChatModel(GOOD_REPLY, ["Peut-être"]), judge=True)
+
+    assert not answer.abstained and answer.judgment is None
+    assert any("n'a pas répondu clairement" in warning for warning in answer.warnings)
+
+
+def test_judge_is_not_asked_after_a_refusal_nor_when_disabled(passages):
+    refusal = ScriptedChatModel(CLEAN_REFUSAL, ["NON"])
+    answer_from_passages(QUESTION, passages, refusal, judge=True)
+    disabled = ScriptedChatModel(GOOD_REPLY, ["NON"])
+    answer = answer_from_passages(QUESTION, passages, disabled, judge=False)
+
+    assert len(refusal.calls) == 1 and len(disabled.calls) == 1
+    assert answer.judgment is None and not answer.abstained
+
+
+def test_nothing_is_streamed_before_the_verdict_of_the_judge(passages):
+    shown: list[str] = []
+
+    answer_from_passages(QUESTION, passages, ScriptedChatModel(GOOD_REPLY, ["NON"]), on_text=shown.append, judge=True)
+
+    assert shown == []
 
 
 # ---------------------------------------------------------------- whole answer

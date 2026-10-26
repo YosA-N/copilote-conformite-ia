@@ -27,7 +27,7 @@ Répondez toujours en deux parties, dans cet ordre :
 
 EXTRAITS :
 - [numéro du passage] « phrase recopiée mot pour mot dans ce passage »
-(six extraits au plus, chacun sur sa ligne ; chaque extrait est une seule phrase ou un seul point a), b)…, jamais un paragraphe entier ; prenez d'abord un extrait de chaque passage qui répond à une partie de la question, avant un deuxième extrait d'un même passage ; recopiez exactement, sans modifier ni résumer ; si vous sautez une partie d'une phrase, remplacez-la par « … »)
+(six extraits au plus, chacun sur sa ligne ; chaque extrait est une seule phrase ou un seul point a), b)…, jamais un paragraphe entier ; choisissez seulement ce qui répond à la question ; recopiez exactement, sans modifier ni résumer ; si vous sautez une partie d'une phrase, remplacez-la par « … »)
 
 RÉPONSE :
 la réponse, écrite uniquement à partir des extraits ci-dessus, avec le numéro du passage entre crochets à la fin de chaque phrase qui s'appuie sur lui.
@@ -41,7 +41,7 @@ Oui : en tant que responsable du traitement, vous devez tenir le document X (RGP
 
 Règles à respecter :
 1. Utilisez UNIQUEMENT les passages fournis, numérotés [1], [2]… N'utilisez aucune autre connaissance.
-2. Si aucun passage ne répond à la question, écrivez « EXTRAITS : aucun » puis « RÉPONSE : Les textes trouvés ne permettent pas de répondre à cette question. »
+2. Si aucun passage ne répond à la question, écrivez « EXTRAITS : aucun » puis « RÉPONSE : Les textes trouvés ne permettent pas de répondre à cette question. » Si les passages ne traitent que d'un sujet voisin, sans répondre directement à la question, commencez la réponse par « Les passages trouvés ne traitent pas directement de votre question. », sans répondre « oui » ni « non ».
 3. N'inventez jamais de numéro d'article, de date, de durée ni de délai : reprenez uniquement ceux des passages et des extraits.
 4. Pour chaque obligation, nommez le règlement (RGPD ou AI Act), l'article et qui est visé (responsable du traitement, sous-traitant, fournisseur, déployeur…), comme dans le passage. N'attribuez pas à la personne une obligation qui vise un autre acteur. Ne réunissez jamais sous un même nom deux obligations de textes différents, même si elles se ressemblent.
 5. Distinguez ce qui est obligatoire (« doit ») de ce qui est permis (« peut »).
@@ -53,6 +53,12 @@ Règles à respecter :
 11. Ne donnez aucun conseil qui ne figure pas dans les extraits."""
 
 REFUSAL = "Les textes trouvés ne permettent pas de répondre à cette question."
+ABSTENTION = "Les passages trouvés ne traitent pas directement de votre question."
+# Second, short call to the model (session 6): the model answers with assurance even when the right
+# article is missing; this question, asked on the verified extracts alone, lets the code abstain.
+JUDGE_PROMPT = """Vous contrôlez le travail d'un assistant qui répond aux questions sur le RGPD et l'AI Act à partir d'extraits de ces textes.
+On vous donne une question et les extraits retenus par l'assistant. Ces extraits répondent-ils DIRECTEMENT à la question posée, c'est-à-dire qu'ils traitent de la situation précise de la question, et pas seulement d'un sujet voisin ?
+Répondez par un seul mot : OUI ou NON."""
 DISCLAIMER = (
     "Information, pas un conseil juridique : vérifiez les textes officiels cités et, en cas de doute, "
     "demandez l'avis d'un professionnel ou de la CNIL."
@@ -152,6 +158,9 @@ class RagAnswer:
     generation: Generation
     search_seconds: float
     generation_seconds: float
+    abstained: bool = False  # the judge found that the extracts do not answer the question directly
+    judgment: bool | None = None  # OUI → True, NON → False, unclear or not asked → None
+    judge_seconds: float = 0.0
 
     @property
     def verified_extracts(self) -> list[Extract]:
@@ -667,13 +676,30 @@ def answer_question(
     mode: str = "vector",
     lexicon: str = "off",
     max_per_article: int | None = None,
+    judge: bool = False,
 ) -> RagAnswer:
     """Search the closest passages, have the model quote them and answer, then check everything."""
     start = time.perf_counter()
     found = search(question, index_dir, embedder, k=k, mode=mode, lexicon=lexicon, max_per_article=max_per_article)
     search_seconds = time.perf_counter() - start
     passages = fit_passages(question, found, chat_model)
-    return answer_from_passages(question, passages, chat_model, on_text, search_seconds, found=len(found))
+    return answer_from_passages(question, passages, chat_model, on_text, search_seconds, found=len(found), judge=judge)
+
+
+def judge_extracts(question: str, extracts: list[str], chat_model: ChatModel) -> bool | None:
+    """Ask the model, in a short separate call, whether the verified extracts answer the question directly.
+
+    True for OUI, False for NON, None if the reply is neither."""
+    if not extracts:
+        return False
+    listed = "\n".join(f"- « {extract} »" for extract in extracts)
+    messages = [
+        {"role": "system", "content": JUDGE_PROMPT},
+        {"role": "user", "content": f"Question : {question}\n\nExtraits :\n{listed}"},
+    ]
+    word = re.match(r"\W*(\w+)", chat_model.generate(messages).text)
+    reply = word.group(1).upper() if word else ""
+    return True if reply == "OUI" else False if reply == "NON" else None
 
 
 def answer_from_passages(
@@ -684,9 +710,13 @@ def answer_from_passages(
     search_seconds: float = 0.0,
     found: int | None = None,
     system_prompt: str = SYSTEM_PROMPT,
+    judge: bool = False,
 ) -> RagAnswer:
-    """Have the model answer from the given passages (also used to compare models or prompts on the same passages)."""
-    stream = AnswerStream(on_text, passages) if on_text else None
+    """Have the model answer from the given passages (also used to compare models or prompts on the same passages).
+
+    With judge=True, a second short call checks that the verified extracts answer the question directly;
+    if not, the answer is replaced by ABSTENTION. Nothing is streamed then, since the verdict comes last."""
+    stream = AnswerStream(on_text, passages) if on_text and not judge else None
     start = time.perf_counter()
     generation = chat_model.generate(build_messages(question, passages, system_prompt), on_text=stream.feed if stream else None)
     generation_seconds = time.perf_counter() - start
@@ -695,8 +725,27 @@ def answer_from_passages(
 
     text, extracts, refused = finalize_answer(generation.text, passages)
     answer_written = bool(split_answer(generation.text)[1])
-    citations = check_citations(text, len(passages)) if not refused else CitationCheck(cited=[], unknown=[])
-    cited = sorted(set(citations.cited) | {extract.passage for extract in extracts if extract.verified}) if not refused else []
+    judgment, judge_seconds = None, 0.0
+    if judge and not refused:
+        start = time.perf_counter()
+        judgment = judge_extracts(question, [extract.text for extract in extracts if extract.verified], chat_model)
+        judge_seconds = time.perf_counter() - start
+    abstained = judgment is False
+    if abstained:
+        text = ABSTENTION
+    shown = not refused and not abstained
+    citations = check_citations(text, len(passages)) if shown else CitationCheck(cited=[], unknown=[])
+    cited = sorted(set(citations.cited) | {extract.passage for extract in extracts if extract.verified}) if shown else []
+    warnings = _warnings(
+        found if found is not None else len(passages), passages, chat_model, generation, extracts, not shown, citations, answer_written, text,
+    )
+    if abstained:
+        warnings.append(
+            "Contrôle de pertinence : les extraits retenus ne répondent pas directement à la question. La réponse du modèle "
+            "n'est pas affichée ; consultez les passages ci-dessous ou reformulez la question."
+        )
+    elif judge and not refused and judgment is None:
+        warnings.append("Le contrôle de pertinence n'a pas répondu clairement (OUI ou NON) : la réponse est affichée sans ce contrôle.")
     return RagAnswer(
         question=question,
         text=text,
@@ -706,20 +755,20 @@ def answer_from_passages(
         passages=passages,
         sources=build_sources(passages, cited),
         citations=citations,
-        warnings=_warnings(
-            found if found is not None else len(passages), passages, chat_model, generation, extracts, refused, citations, answer_written,
-            text,
-        ),
+        warnings=warnings,
         generation=generation,
         search_seconds=search_seconds,
         generation_seconds=generation_seconds,
+        abstained=abstained,
+        judgment=judgment,
+        judge_seconds=judge_seconds,
     )
 
 
 def render_footer(answer: RagAnswer) -> str:
     """Verified extracts, sources, warnings and the legal warning, added by the code after every answer."""
     lines = []
-    verified = answer.verified_extracts
+    verified = answer.verified_extracts if not answer.abstained else []  # extracts judged off the point are not shown as support
     if verified:
         lines.append("Extraits vérifiés (recopiés mot pour mot des textes) :")
         for extract in verified:
