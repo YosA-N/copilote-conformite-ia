@@ -2,9 +2,11 @@
 
 « mention d'information » → « informations à fournir à la personne concernée… »
 
-The entries come only from the failures of eval/questions_v0.jsonl, from the examples given
-when the project was planned and from common acronyms. They must NOT be written from the
-questions of eval/questions_v1.jsonl, which are kept to measure the effect fairly.
+Sessions 5 to 6, part 1: the entries came only from the failures of eval/questions_v0.jsonl, from
+the examples given when the project was planned and from common acronyms. Since session 6, part 2,
+the v1 questions have been reviewed and may be used too (CLAUDE.md): the last entries come from the
+failures of v1, always as general « everyday word → legal wording » pairs. They must NEVER come
+from eval/questions_v2.jsonl, the final exam.
 """
 
 import re
@@ -24,6 +26,15 @@ LEXICON: list[tuple[str, str]] = [
     (r"form(er|ation) .*\bia\b|ia generative|utilisent une ia", "maîtrise de l'IA du personnel et des personnes s'occupant du fonctionnement et de l'utilisation des systèmes d'IA"),
     (r"clients?|adherents?|benevoles?|salaries?", "personne concernée"),
     (r"\bpme\b|entreprise|association", "responsable du traitement"),
+    # session 6, part 2: from the failures of v1 (q14, q15, q16, q18, q21, q24, q27)
+    (r"sante|medical|maladie|handicap", "données concernant la santé, catégories particulières de données à caractère personnel"),
+    (r"lettre d.information|newsletter|prospection|publicit|e-?mails? (commercia|promotion)", "prospection, droit d'opposition de la personne concernée"),
+    (r"proteger .*donnees|securi[st]", "sécurité du traitement : mesures techniques et organisationnelles appropriées"),
+    (r"prestataire|sous-traitan", "sous-traitant qui traite des données pour le compte du responsable du traitement"),
+    (r"etats-unis|hors (de l.)?(ue|union|europe)|pays tiers|a l.etranger", "transfert de données vers un pays tiers, décision d'adéquation, garanties appropriées"),
+    # the lexicon translates words, it never gives the conclusion: emotion recognition is only forbidden at work and in education
+    (r"emotion", "systèmes de reconnaissance des émotions"),
+    (r"amendes?|sanctions?", "amendes administratives"),
 ]
 
 

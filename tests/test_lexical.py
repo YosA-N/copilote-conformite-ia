@@ -2,7 +2,7 @@
 
 import pytest
 
-from compliance_copilot.index import article_of, limit_per_article, search
+from compliance_copilot.index import article_of, limit_per_article, paragraph_number, search, with_first_paragraphs
 from compliance_copilot.lexical import BM25, reciprocal_rank_fusion, tokenize
 from compliance_copilot.lexicon import expand_query
 
@@ -58,6 +58,33 @@ def test_at_most_n_chunks_of_the_same_article_are_kept_in_order():
         "ai_act:art_50:par_4", "ai_act:art_50:par_1", "ai_act:art_26:par_3", "ai_act:art_26:par_1", "ai_act:art_4",
     ]
     assert limit_per_article(ranked, None) == ranked
+
+
+def test_paragraph_numbers():
+    assert paragraph_number("gdpr:art_9:par_2_a-i") == 2
+    assert paragraph_number("gdpr:art_9:par_1") == 1
+    assert paragraph_number("ai_act:art_5:par_1-bis") is None
+    assert paragraph_number("gdpr:art_4:def_1") is None
+    assert paragraph_number("gdpr:art_37") is None
+
+
+def test_first_paragraph_of_a_split_article_is_added_after_a_later_paragraph():
+    firsts = {"gdpr:art_9": "gdpr:art_9:par_1", "ai_act:art_99": "ai_act:art_99:par_1", "ai_act:art_5": "ai_act:art_5:par_1_a-e"}
+    ranked = ["gdpr:art_9:par_3", "gdpr:art_12:par_1", "gdpr:art_9:par_4", "gdpr:art_37", "ai_act:art_5:par_1_f-h", "gdpr:art_4:def_15"]
+
+    assert with_first_paragraphs(ranked, firsts) == [
+        "gdpr:art_9:par_3", "gdpr:art_9:par_1",  # § 3 kept: § 1 (the prohibition) comes right after, as a 3rd chunk of art. 9
+        "gdpr:art_12:par_1", "gdpr:art_9:par_4", "gdpr:art_37",
+        "ai_act:art_5:par_1_f-h",  # already a part of § 1: nothing added
+        "gdpr:art_4:def_15",  # a definition is not a paragraph
+    ]
+    assert with_first_paragraphs(["gdpr:art_9:par_1", "gdpr:art_9:par_3"], firsts) == ["gdpr:art_9:par_1", "gdpr:art_9:par_3"]
+
+
+def test_search_with_first_paragraph_keeps_k_results(index_dir, fake_embedder):
+    results = search("désignation délégué", index_dir, fake_embedder, k=3, max_per_article=2, first_paragraph=True)
+
+    assert len(results) == 3 and [r.rank for r in results] == [1, 2, 3]
 
 
 def test_search_respects_the_limit_per_article(index_dir, fake_embedder):

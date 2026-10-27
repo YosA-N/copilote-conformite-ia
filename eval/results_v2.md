@@ -1,0 +1,355 @@
+# Résultats de la séance 6 — le vrai examen
+
+Toutes les mesures sont produites par les scripts du dépôt, ordinateur sur secteur. Depuis la partie 2, les questions v1 ont été relues et servent aussi au réglage. **La mesure finale se fera uniquement sur `eval/questions_v2.jsonl`** (figé au commit `65ee0c4`, jamais lu ni utilisé) **et sur les questions personnelles de l'auteur**.
+
+## 1. Relectures (grille `eval/rubric.md`)
+
+Commande : `scripts/review_summary.py --check`.
+
+| Version | Questions | Juste | Partiel | Faux | Dangereux |
+|---|---|---|---|---|---|
+| v0 (séance 4) | 12 | 5 | 1 | 3 | 3 |
+| v1 (séance 5) | 12 | 9 | 2 | 0 | 1 |
+| v2 (séance 5 bis) | 12 | 6 | 5 | 0 | 1 |
+| v3 (séance 5 ter), questions v0 | 12 | **9** | 3 | 0 | 0 |
+| **heldout_v3** : même configuration, questions v1 | 20 | **6** | 5 | 5 | **4** |
+| v4 (séance 6), questions v0 | 12 | 8 | 2 | 0 | 2 |
+| heldout_v4 : même configuration, questions v1 | 20 | 9 | 3 | 4 | 4 |
+
+Les lignes v4 et heldout_v4 sont détaillées en section 11. Reclassements selon la grille, décidés par l'auteur :
+- v0 q01 et v2 q08 sont devenues « dangereux » (partie 1) ;
+- v3 q03 est devenue « partiel » au lieu de « juste », pour la même règle que v4 : la couverture est partielle et la réponse ne dit pas que les durées concrètes viennent d'autres textes.
+
+La v3 paraît bonne sur les questions qui ont servi à la régler (v0), mais pas sur les questions v1 : c'est du **sur-apprentissage** (**overfitting**).
+
+## 2. Diagnostic de heldout_v3 (avant tout changement)
+
+Cause principale de chaque réponse non juste :
+- (a) recherche : l'article ou le paragraphe utile n'est pas dans les 5 passages ;
+- (b) rédaction : il y est, mais le modèle se trompe ;
+- (c) longueur : réponse coupée ;
+- (d) hors sujet non refusé.
+
+| Question | Verdict | Cause | Détail |
+|---|---|---|---|
+| q14 | faux | (a) | art. 21 au rang 16 ; réponse aussi coupée (c) |
+| q15 | dangereux | (a) | art. 28 au rang 6 |
+| q16 | partiel | (a) | art. 46 trouvé, art. 45 absent ; plus un paragraphe sans rapport (b) |
+| q18 | dangereux | (a) | seul l'art. 9, § 3 est trouvé ; le § 1 (l'interdiction) est au-delà du rang 30. « santé » attire le § 3 (« professionnel de la santé ») |
+| q21 | partiel | (a) | art. 32 au rang 25 |
+| q24 | dangereux | (a) | art. 5 au rang 8 ; le point f) (émotions) au rang 10 ou 11 |
+| q12 | partiel | (b) | art. 15 présent, mais son § 1 est oublié |
+| q20 | faux | (b) | « 13 ans » figure dans l'extrait mais est omis |
+| q22 | partiel | (b) | art. 7 présent ; le § 1 est oublié et le § 2 mal lu |
+| q25 | faux | (b) | « peut faire preuve » devient un critère obligatoire |
+| q26 | dangereux | (b) | art. 50, § 4 présent ; la condition (hypertrucage) et l'acteur sont perdus |
+| q27 | faux | (b) | le modèle prend l'art. 100 ; le § 4 de l'art. 99 est exclu par la limite de 2 par article ((a) secondaire) |
+| q23 | partiel | (c) | réponse coupée |
+| h05 | faux | (d) | statuts d'association traités avec 5 passages sans rapport |
+
+**Bilan** : 6 réponses relèvent de la recherche (dont 3 des 4 dangereuses), 6 de la rédaction (dont 1 dangereuse), 1 de la longueur et 1 est un hors sujet traité. **Quand le bon article manque, le modèle répond quand même, avec assurance.**
+
+**Un seuil sur le score de la recherche ne permet pas de s'abstenir** :
+
+| Groupe (32 questions v0 et v1) | Score du 1er passage : moyenne (min – max) |
+|---|---|
+| Article attendu dans les 5 passages (23) | 0,653 (0,553 – 0,742) |
+| Article attendu absent (4) | 0,599 (0,527 – 0,673) |
+| Hors sujet (5) | 0,473 (0,398 – 0,570) |
+
+q24, dangereuse, a 0,673 ; h05, hors sujet, a 0,570, soit plus que q16, une question bien couverte (0,553).
+
+## 3. Mesure au niveau du paragraphe
+
+Quand un article est découpé en plusieurs morceaux et qu'un paragraphe précis compte, `expected` le précise désormais, pour 3 questions v0 et 9 questions v1. Exemple : q18 → art. 9, § 1 et § 2, pas le § 3. Les scripts mesurent deux niveaux :
+- **article** : chaque référence est ramenée à son article ou à son point d'annexe, si bien que les chiffres publiés avant ne changent pas ;
+- **paragraphe** : il faut trouver le paragraphe précisé.
+
+Un morceau découpé par points (`par_2_a-i`) compte pour son paragraphe. **La mesure par article cachait des échecs** : pour q18, elle comptait l'art. 9 comme trouvé au rang 1 alors que le paragraphe utile manquait.
+
+## 4. Recherche
+
+Commande : `scripts/compare_retrieval.py --repeat 3` (trois mesures identiques).
+
+**Avant le nouveau lexique :**
+
+| Configuration | Niveau | v0 hit@1 | v0 hit@5 | v0 hit@8 | v1 hit@1 | v1 hit@5 | v1 hit@8 |
+|---|---|---|---|---|---|---|---|
+| vecteurs + lexique + 2 par article (v3) | article | 7/10 | 10/10 | 10/10 | 10/17 | 13/17 | 15/17 |
+| | paragraphe | 7/10 | 10/10 | 10/10 | 8/17 | 11/17 | 12/17 |
+| vecteurs + lexique + 3 par article | article | 7/10 | **9/10** | 10/10 | 10/17 | 13/17 | 15/17 |
+| | paragraphe | 7/10 | 9/10 | 10/10 | 8/17 | 11/17 | 13/17 |
+
+**Après le nouveau lexique** (7 entrées générales tirées des échecs de v1) :
+
+| Configuration | Niveau | v0 hit@1 | v0 hit@5 | v0 hit@8 | v1 hit@1 | v1 hit@5 | v1 hit@8 |
+|---|---|---|---|---|---|---|---|
+| **vecteurs + lexique + 2 par article (retenu)** | article | 7/10 | **10/10** | 10/10 | 14/17 | **17/17** | 17/17 |
+| | paragraphe | 7/10 | 10/10 | 10/10 | 12/17 | **15/17** | 15/17 |
+| vecteurs + lexique, sans limite | article | 7/10 | 9/10 | 10/10 | 14/17 | 17/17 | 17/17 |
+| | paragraphe | 7/10 | 9/10 | 10/10 | 12/17 | 17/17 | 17/17 |
+| vecteurs + lexique + 3 par article | article | 7/10 | 9/10 | 10/10 | 14/17 | 17/17 | 17/17 |
+| | paragraphe | 7/10 | 9/10 | 10/10 | 12/17 | 16/17 | 16/17 |
+
+Les 7 nouvelles entrées du lexique associent un mot courant au terme juridique :
+- « santé, médical » → « données concernant la santé, catégories particulières » ;
+- « lettre d'information, prospection » → « prospection, droit d'opposition » ;
+- « protéger les données, sécurité » → « sécurité du traitement » ;
+- « prestataire » → « sous-traitant » ;
+- « États-Unis, hors de l'UE » → « transfert vers un pays tiers » ;
+- « émotions » → « reconnaissance des émotions, pratiques interdites » ;
+- « amendes, sanctions » → « amendes administratives ».
+
+**Décisions :**
+- **Nouveau lexique : retenu.** Le hit@5 ne baisse sur aucun jeu, et v1 monte (article 13 → 17/17, paragraphe 11 → 15/17). Ces entrées visent les échecs de v1 : **les scores v1 sont donc optimistes**, et seul l'examen final dira si elles généralisent.
+- **Limite par article : 2 gardée.** Avec 3 ou sans limite, le niveau paragraphe de v1 serait meilleur (16 ou 17/17 : q18, q27), mais le hit@5 de v0 baisse (9/10, q10 au rang 6 ou 7). La règle l'exclut. C'est un vrai compromis : avec la limite de 2, le § 1 de l'art. 9 (q18) et les § 4 et 6 de l'art. 99 (q27) restent hors des 5 passages.
+- **8 passages au lieu de 5 : non retenu.** Avec le nouveau lexique, le hit@8 n'apporte plus rien (égal au hit@5) et il coûtait du temps (section 6).
+
+## 5. Juge d'abstention
+
+Un second appel court au modèle reçoit la question et les extraits vérifiés, et répond OUI ou NON : « Ces extraits répondent-ils DIRECTEMENT à la question posée ? ». Si c'est NON, la réponse est remplacée par « Les passages trouvés ne traitent pas directement de votre question. » ; les passages consultés restent affichés, avec une alerte.
+
+**Calibrage sans régénérer**, sur les 32 réponses relues (v3 sur v0, heldout_v3 sur v1) :
+
+| Verdict de la relecture | Abstentions du juge |
+|---|---|
+| juste | **0 / 12** |
+| partiel | 2 / 7 (q16, q22) |
+| faux | 1 / 5 (h05, le hors sujet) |
+| dangereux | **2 / 4** (q15, q18) ; q24 et q26 passent |
+
+Temps du juge : médian 4,5 s, maximal 14,3 s. **Retenu**, car il ne s'abstient sur aucune réponse juste. **Coût** : selon la grille, une abstention alors que le corpus répond est « fausse ». q16 et q22, partielles, deviendraient fausses, tandis que q15 et q18 passeraient de « dangereux » à « faux » et h05 de « faux » à « juste ».
+
+## 6. Effet séparé de chaque changement sur les réponses dangereuses
+
+| Question | Départ (v3, 5 passages) | 8 passages seuls | Juge seul | 8 passages + juge |
+|---|---|---|---|---|
+| q15 | dangereux ; art. 28 absent | **corrigée en apparence** : art. 28, § 3 au passage 6, « il est obligatoire de signer un contrat » | **abstention** | réponse gardée (juge OUI) |
+| q18 | dangereux ; seul l'art. 9, § 3 | inchangé : § 1 et § 2 toujours absents, même réponse dangereuse | **abstention** | réponse dangereuse gardée (juge OUI) |
+| q24 | dangereux ; art. 5 absent | **inchangé** : le 8e passage (art. 5) est retiré faute de place, 7 passages seulement ; « Oui, vous avez le droit… » | réponse gardée (juge OUI) | réponse gardée |
+| q26 | dangereux (rédaction) | inchangé | réponse gardée | réponse gardée |
+| h05 | faux (hors sujet traité) | inchangé | **abstention** | **abstention** |
+
+Ce n'est pas un verdict : c'est ma lecture rapide, et la relecture reste la vôtre. Points à retenir :
+- **q24 : l'hypothèse « ce sont les 8 passages qui aident » ne se vérifie pas.** L'art. 5 arrivait au rang 8 par son morceau a) à e), qui n'est pas le bon. Le point f) (émotions) était au rang 10 ou 11, et le 8e passage a été retiré faute de place dans le contexte : 5 questions sur 32 ont reçu moins de 8 passages. C'est **le lexique** qui règle q24 : le point f) arrive au rang 2.
+- **Le juge n'est pas stable** : sur q18, il dit NON sur la réponse de départ et OUI sur celle à 8 passages, qui est presque identique.
+- **q26 (rédaction)** n'est réglée ni par plus de passages ni par le juge.
+- **Temps de « 8 passages seuls »** : génération médiane de 48 s, maximale de 93 s (prompt de 4 345 tokens en moyenne, contre 3 186), au-delà de l'objectif de 60 s.
+
+## 7. Configuration complète (v4)
+
+Changements retenus :
+- **recherche** : nouveau lexique, 5 passages, au plus 2 par article ;
+- **juge d'abstention** activé (`ANSWER_JUDGE=on`) ;
+- **longueur** : `LLM_MAX_TOKENS` porté de 1 500 à 2 000 ;
+- **prompt** : la règle « un extrait de chaque passage utile d'abord » est retirée, et une consigne demande « Les passages trouvés ne traitent pas directement de votre question. » quand les passages ne traitent que d'un sujet voisin.
+
+Commande : `compare_models.py qwen3:4b-instruct` (32 questions, mêmes réglages que v3 pour le reste).
+
+| Mesure (32 questions) | v3 (séance 5 ter) | 8 passages seuls | **v4** |
+|---|---|---|---|
+| Réponses données (sur 27) | 27 | 27 | 26 (1 abstention : q22) |
+| Avec un extrait vérifié de l'article attendu | 22 | 23 | **26** |
+| Avec un extrait vérifié du paragraphe attendu | — | 21 | **24** |
+| Hors sujet refusés (sur 5) | 4 | 4 | **5** |
+| Extraits vérifiés / recopiés | 78 / 85 | 92 / 97 | 72 / 79 |
+| Réponses coupées | 2 | 2 | **0** |
+| Réponses avec au moins une alerte | 15 / 32 | 10 / 32 | 14 / 32 |
+| Mots par réponse donnée | 131 | 137 | 134 |
+| Prompt lu (tokens, moyenne) | 3 186 | 4 345 | 3 176 |
+| Temps médian (génération + juge) | 31 s | 48 s | **40 s** |
+| Temps maximal (génération + juge) | 75 s | 93 s | **105 s** |
+| Questions au-delà de 60 s | 2 / 32 | 9 / 32 | **6 / 32** (q23, q27, q04, q11, q21, q16) |
+
+**Temps : l'objectif d'environ 60 s au plus n'est pas tenu.** Les réponses lentes sont celles où le modèle recopie de très longs extraits. Par exemple, pour q23, il écrit 1 083 mots, dont 318 de réponse ; pour q04, 1 143 mots, dont 254. La limite de 2 000 tokens supprime les réponses coupées, mais laisse ces écritures s'allonger.
+
+Les fichiers de réponses donnent des temps plus mauvais, à cause d'incidents de la machine. Ils ne sont pas retenus comme mesure :
+- q20 de heldout_v4 : l'ordinateur s'est mis en veille pendant la question ;
+- q06 de v4 : génération à 6 tokens/s au lieu de 28 ;
+- q17 de heldout_v4 : environ 3 minutes bloquée à la lecture du prompt.
+
+| Fichier | Temps total médian | Maximum | Au-delà de 60 s |
+|---|---|---|---|
+| `answers_v3.md` | 36 s | 70 s | 1 / 12 |
+| `answers_heldout_v3.md` | 40 s | 77 s | 3 / 20 |
+| `answers_v4.md` | 42 s | 188 s (incident) | 2 / 12 |
+| `answers_heldout_v4.md` | 42 s | 216 s (incident ; q20 exclue) | 5 / 20 |
+
+**Compromis proposé (non fait, à valider)** : 60 s correspondent à environ 12 s de lecture du prompt, 5 s de juge et 43 s d'écriture, soit environ 1 200 tokens à 28 tokens/s. Deux leviers :
+- demander des **extraits courts**, une phrase ou un point de 40 mots au plus, puisque ce sont les extraits qui allongent l'écriture ;
+- ramener `LLM_MAX_TOKENS` à environ 1 200.
+
+Risque : des réponses de nouveau coupées sur les longues listes (q04, q23), donc « partiel » selon la grille. À mesurer sur v0 et v1.
+
+**Ma lecture rapide des réponses surveillées** (le verdict reste le vôtre), dans `answers_heldout_v4.md` :
+- **q15** : corrigée en apparence. L'art. 28, § 3 est trouvé : « il faut signer un contrat particulier ».
+- **q18** : toujours problématique. La réponse dit « Oui… », sans l'interdiction de principe (§ 1) ni ses exceptions (§ 2), que la limite de 2 par article tient hors des passages (les § 3 et § 4 occupent les deux places).
+- **q24** : juste en apparence : « Non, vous n'avez pas le droit…, sauf si … pour des raisons médicales ou de sécurité ». Mais dans la comparaison des 32 questions, faite le même jour avec la même configuration, le modèle avait **inversé** l'exception (« à condition que … pour des raisons autres que médicales ») ; l'alerte « négation » l'avait signalé. **Le modèle n'est pas stable d'un lancement à l'autre.**
+- **q26** : la condition d'hypertrucage manque toujours (erreur de rédaction).
+- **h05** : refusée par le modèle lui-même (« Les textes trouvés ne permettent pas de répondre… »).
+- **q22** : abstention du juge, alors que le corpus contient la réponse (art. 7) : « faux » selon la grille.
+
+## 8. Compromis de temps : extraits courts, 2 000 ou 1 200 tokens
+
+Variante du prompt v4 : `eval/prompts/short_extracts.txt`. Une seule phrase change : chaque extrait fait « 40 mots au plus (si la phrase est plus longue, gardez seulement la partie qui répond et remplacez le reste par « … ») ». Commande : `compare_models.py qwen3:4b-instruct --prompt-file eval\prompts\short_extracts.txt`, avec `LLM_MAX_TOKENS=2000` puis `1200`. Mêmes 32 questions (v0, hors sujet, v1), le même jour, sur secteur, juge activé.
+
+| Mesure (32 questions) | v4 | Extraits courts + 2 000 | Extraits courts + 1 200 |
+|---|---|---|---|
+| Réponses données (sur 27) | 26 | 25 | 24 |
+| Abstentions du juge (dans le corpus) | q22 | q10, q22 | q10, q22 |
+| Extrait de l'article attendu | 26 | 27 | 27 |
+| Extrait du paragraphe attendu | 24 | 25 | 25 |
+| Hors sujet refusés (sur 5) | 5 | 5 | 5 |
+| Extraits vérifiés / recopiés | 72 / 79 | 99 / 107 | 103 / 108 |
+| Réponses coupées | 0 | 0 | **1 (q23, refusée)** |
+| Mots écrits (extraits + réponse), moyenne | 342 | 292 | 271 |
+| Mots de réponse (réponses données) | 134 | 75 | 65 |
+| Temps médian (génération + juge) | 40 s | 37 s | **34 s** |
+| Temps maximal | 105 s | 90 s | **60 s** |
+| Questions au-delà de 60 s | 6 / 32 | 2 / 32 | 1 / 32 (q04, 60 s) |
+| tokens/s (moyenne) | 28,3 | 34,2 | 34,2 |
+
+Temps des questions lentes de la v4 (génération et juge ; « coupée » indique une réponse coupée) :
+
+| Question | v4 | Courts + 2 000 | Courts + 1 200 |
+|---|---|---|---|
+| q23 | 105 s | 90 s | 41 s, coupée |
+| q27 | 88 s | 56 s | 51 s |
+| q04 | 88 s | 59 s | 60 s |
+| q11 | 70 s | 55 s | 28 s |
+| q21 | 66 s | 49 s | 46 s |
+| q16 | 63 s | 42 s | 41 s |
+
+**Lecture honnête :**
+- **La machine était plus rapide pendant ces deux mesures** (34 tokens/s, contre 28 pour la v4). Une partie du gain vient donc d'elle. Le volume écrit, lui, baisse vraiment : 342 → 292 → 271 mots, soit −15 % puis −21 %.
+- **Extraits courts + 1 200 tient l'objectif de 60 s**, mais q23 (« Quelles utilisations de l'IA sont interdites ? ») est coupée avant la réponse et devient un refus, donc « faux » selon la grille.
+- **Extraits courts + 2 000 ne coupe rien**, mais q23 prend encore 90 s.
+- **Effet de bord des extraits courts** : le juge s'abstient sur q10 (art. 4, maîtrise de l'IA), qui était partielle en v3. C'est une abstention à tort, donc « faux » selon la grille.
+- **Réponses plus courtes** (134 → 75 mots) : à vérifier par la relecture, car le risque est d'en faire des réponses « partielles ».
+- **Lecture rapide des réponses surveillées**, pas un verdict :
+  - q24 est juste en apparence dans les deux variantes ;
+  - q26 cite enfin la condition d'hypertrucage avec 2 000 tokens, mais pas avec 1 200 ;
+  - q15 reste corrigée ;
+  - q18 reste problématique ;
+  - h05 est arrêtée par le juge.
+
+**Décision de l'auteur** : `LLM_MAX_TOKENS = 2 000` (aucune réponse coupée), et extraits courts gardés **seulement s'ils ne réduisent ni le nombre d'extraits vérifiés ni la complétude des réponses**.
+
+Vérification du critère (v4 contre extraits courts + 2 000, mêmes 32 questions) :
+- **extraits vérifiés** : le total monte (72 → 99), mais **4 questions en ont moins** (q03, q11, q16, q21) ;
+- **complétude** :
+  - **11 réponses sur 27 raccourcissent de plus de 40 %** (q04, q07, q10, q11, q14, q17, q18, q19, q21, q26, q27) ;
+  - **q10 est perdue** (abstention du juge alors que l'art. 4 répond) ;
+  - **q06 déclenche l'alerte « liste de cas incomplète »** (2 des 3 cas de l'art. 34, § 3).
+
+**Le critère n'est pas rempli : retour aux extraits normaux.** La configuration retenue est la **v4** : nouveau lexique, 5 passages, au plus 2 par article, juge, extraits normaux, `LLM_MAX_TOKENS = 2 000`. `eval/prompts/short_extracts.txt` reste comme trace de la variante mesurée. `eval/answers_v4.md` et `eval/answers_heldout_v4.md` sont régénérés avec cette configuration (section 10), car la première génération avait subi des incidents de la machine.
+
+## 9. Points ouverts
+
+- **Temps** : la configuration retenue dépasse l'objectif de 60 s sur les longues réponses (section 10). C'est un choix assumé pour ne couper aucune réponse.
+- **q24 et le lexique neutre** (section 10.1) : sans « pratiques interdites », l'art. 5 retombe au rang 10. Une piste neutre, à mesurer, serait d'ajouter « inférer les émotions », l'expression même du texte : c'est du vocabulaire, pas une conclusion.
+
+## 10. Trois corrections générales avant les réponses finales (demandées par l'auteur)
+
+### 10.1 Lexique : entrée « émotions » neutre
+
+L'entrée devient « systèmes de reconnaissance des émotions », sans « pratiques interdites en matière d'IA ». Le lexique traduit le vocabulaire, il ne donne pas la conclusion : la reconnaissance des émotions n'est interdite qu'au travail et dans l'enseignement (art. 5, § 1, f).
+
+**Effet mesuré** : q24 retombe au rang 10 (au lieu de 1), donc hors des 5 passages. v1 au niveau article passe de 17/17 à **16/17**. C'est un recul honnête : l'ancienne entrée trouvait l'art. 5 parce qu'elle contenait la réponse.
+
+### 10.2 Premier paragraphe d'un article découpé
+
+Quand un paragraphe suivant d'un article découpé est retenu (par exemple art. 9, § 3), la recherche ajoute juste après le 1er paragraphe de cet article (art. 9, § 1, l'interdiction de principe), s'il manque. Il compte dans la limite de 2 par article, ou vient en 3e position. Les définitions et les points d'annexe ne sont pas concernés. Réglage : `SEARCH_FIRST_PARAGRAPH`.
+
+Commande : `compare_retrieval.py --repeat 3` (trois mesures identiques, lexique neutre).
+
+| Configuration | Niveau | v0 hit@1 | v0 hit@5 | v0 hit@8 | v1 hit@1 | v1 hit@5 | v1 hit@8 |
+|---|---|---|---|---|---|---|---|
+| vecteurs + lexique + 2 par article | article | 7/10 | 10/10 | 10/10 | 13/17 | 16/17 | 16/17 |
+| | paragraphe | 7/10 | 10/10 | 10/10 | 12/17 | 14/17 | 14/17 |
+| **+ 1er paragraphe (retenu)** | article | 7/10 | **10/10** | 10/10 | 13/17 | **16/17** | 16/17 |
+| | paragraphe | 7/10 | 10/10 | 10/10 | 12/17 | **15/17** | 15/17 |
+
+**Retenu** : le hit@5 ne baisse sur aucun jeu, et le niveau paragraphe de v1 monte de 14 à 15/17. Effets par question :
+- **q18** : l'art. 9, § 2 (les exceptions) arrive au rang 2 ;
+- **q27** n'en profite pas, comme on pouvait le craindre : son 1er paragraphe n'est pas le paragraphe utile (§ 4 et § 6) ;
+- **q03** passe du rang 4 au rang 5 et reste donc dans les 5 passages.
+
+### 10.3 Contrôle de négation : inversions sans « ne … pas »
+
+1. **Inversions** : en plus de « ne … pas », « aucun », « non » et « sans », le contrôle cherche « autres que », « hors », « excepté » et « à l'exception de ». Ces mots sont lus sur 30 mots côté réponse et sur 40 côté extrait.
+2. **Règle contraire** (le « sauf pour » inversé) : l'exception est bien recopiée, mais rattachée à la règle inverse. Par exemple, la réponse dit « vous avez le droit…, à condition que… » alors que l'extrait est un point d'une liste annoncée par « Les pratiques … suivantes sont interdites : ». La ligne qui annonce la liste est lue dans le passage.
+
+**Test de non-régression** : la phrase inversée de q24 (comparaison v4, « Oui, vous avez le droit…, à condition que l'utilisation ne soit pas destinée … pour des raisons autres que médicales ou de sécurité »), avec le vrai extrait de l'art. 5, § 1, f) et son passage. Les deux contrôles la signalent. La réponse fidèle (« Non…, sauf si … pour des raisons médicales ou de sécurité ») ne l'est pas.
+
+**Fausses alertes**, en rejouant les 7 séries de réponses enregistrées (224 réponses) : aucune nouvelle. Les seules alertes sont q08 (v2) et q24 (v4), deux vraies erreurs, ainsi que q11 (v3) et q06 (v4), deux fausses alertes qui existaient déjà avant cette extension.
+
+### 10.4 Configuration retenue et réponses à relire
+
+**Configuration finale v4** :
+- **recherche** : vecteurs `bge-m3` + lexique (entrée « émotions » neutre), 5 passages, au plus 2 par article, 1er paragraphe d'un article découpé ;
+- **génération** : extraits normaux, `LLM_MAX_TOKENS = 2 000`, juge d'abstention ;
+- **contrôles** : contrôle de négation étendu.
+
+Les réponses `eval/answers_v4.md` (questions v0 et hors sujet) et `eval/answers_heldout_v4.md` (questions v1) ont été générées avec cette configuration, sur secteur, sans incident.
+
+**Temps par question** (recherche, génération et juge compris) :
+
+| Fichier | Médian | Maximum | Au-delà de 60 s |
+|---|---|---|---|
+| `answers_v4.md` (12 questions) | 40 s | 89 s (q04) | 1 |
+| `answers_heldout_v4.md` (20 questions) | 38 s | 88 s (q23) | 3 (q23, q21 71 s, q27 70 s) |
+| **Les 32 questions** | **39 s** | **89 s** | **4 / 32** |
+
+L'objectif d'environ 60 s n'est pas tenu pour les 4 réponses les plus longues. C'est le choix de l'auteur : ne couper aucune réponse.
+
+**Lecture rapide des réponses surveillées** (`answers_heldout_v4.md` ; pas un verdict) :
+- **q15** : juste en apparence (art. 28, § 3).
+- **q18** : la réponse **change de sens** : « Non, l'association ne peut pas… interdit par l'article 9 ». L'art. 9 est désormais vu, mais sans ses exceptions (consentement explicite, associations pour leurs membres) : la réponse est trop restrictive.
+- **q24** : **abstention du juge**. Avec le lexique neutre, l'art. 5 n'est plus dans les passages. C'est sans danger, mais « faux » selon la grille, puisque le corpus répond.
+- **q26** : l'hypertrucage est cité, mais rattaché à l'exception artistique au lieu de conditionner l'obligation.
+- **h03, h04, h05** : refusées.
+- **Abstentions** : q22 et q24.
+
+## 11. Relecture des réponses v4 (`eval/reviews/v4.jsonl`, `eval/reviews/heldout_v4.jsonl`)
+
+Commande : `scripts/review_summary.py --check`.
+
+| Version | Questions | Juste | Partiel | Faux | Dangereux |
+|---|---|---|---|---|---|
+| v0 | 12 | 5 | 1 | 3 | 3 |
+| v1 | 12 | 9 | 2 | 0 | 1 |
+| v2 | 12 | 6 | 5 | 0 | 1 |
+| v3 | 12 | 9 | 3 | 0 | 0 |
+| **v4** | 12 | **8** | 2 | 0 | **2** |
+| heldout_v3 | 20 | 6 | 5 | 5 | 4 |
+| **heldout_v4** | 20 | **9** | 3 | 4 | **4** |
+
+Questions qui ne sont pas justes :
+- **v4** : partiel q03, q10 · dangereux q01, q07 ;
+- **heldout_v4** : partiel q12, q23, q27 · faux q20, q22, q24, q25 · dangereux q14, q16, q18, q26.
+
+**Évolution, question par question** (relectures de l'auteur) :
+- **questions v1** (heldout_v3 → heldout_v4) : 6 → 9 justes, mais **toujours 4 dangereuses**.
+  - Progrès :
+    - q15 (dangereux → juste) ;
+    - q21 (partiel → juste) ;
+    - h05 (faux → juste) ;
+    - q24 (dangereux → faux : abstention, sans danger) ;
+    - q27 (faux → partiel).
+  - Reculs :
+    - q14 (faux → dangereux : opposition à la prospection soumise à des « raisons tenant à la situation particulière ») ;
+    - q16 (partiel → dangereux : « les États-Unis n'ont pas de décision d'adéquation », fait inventé, absent des passages et faux depuis 2023 ; le contrôle d'absence ne l'a pas vu) ;
+    - q22 (partiel → faux : abstention du juge).
+  - Toujours dangereuses, mais autrement :
+    - q18 : « Non, interdit », sans les exceptions de l'art. 9, § 2 ;
+    - q26 : obligation pour toute image.
+- **questions v0** (v3 → v4) : 9 → 8 justes, et **2 dangereuses** alors que la v3 n'en avait aucune.
+  - q01 (juste → dangereux : « une AIPD suppose que le DPO a été désigné ») ;
+  - q07 (juste → dangereux : l'AIPD confondue avec l'analyse d'impact de l'art. 27 de l'AI Act) ;
+  - q03 (partiel dans les deux versions : en v3, elle ne signalait pas non plus que les durées concrètes viennent d'autres textes ; reclassée de « juste » à « partiel » selon la grille, même règle que v4) ;
+  - q04 (partiel → juste).
+- **Limite par article** : avec 2, q18 et q27 perdent le paragraphe utile ; avec 3 ou sans limite, v0 perd q10. Une autre piste générale serait de garder le premier paragraphe d'un article découpé, qui pose souvent la règle, quand un autre de ses paragraphes est retenu.
+- **Juge** : utile sur les hors sujet et sur certaines réponses sans bon article (q15, q18 à la calibration), mais instable, et il coûte des réponses partielles (q16, q22).
+- **Rédaction** (q20, q25, q26) : aucune correction générale dans cette séance.
+- **Optimisme de v1** : les nouvelles entrées du lexique viennent des échecs de v1. Seul l'examen final (`questions_v2.jsonl` et les questions de l'auteur) mesurera la généralisation.

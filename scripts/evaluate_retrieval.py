@@ -1,8 +1,9 @@
-"""Measure the search on the test questions: hit@1, hit@5 and, for each question, the rank of
+"""Measure the search on the test questions: hit@1, hit@5, hit@8 and, for each question, the rank of
 the first expected article.
 
-The rank is looked for among the DEPTH first passages; further away, the article counts as
-« non trouvé ». Run scripts/build_index.py first.
+Two levels: the article (as measured since session 3) and, when a question names the paragraph
+that matters (session 6), that paragraph. The rank is looked for among the DEPTH first passages;
+further away, it counts as « non trouvé ». Run scripts/build_index.py first.
 
 Usage, from the repository root:
     .venv\\Scripts\\python scripts\\evaluate_retrieval.py [--questions eval\\questions_v0.jsonl]
@@ -14,7 +15,7 @@ from pathlib import Path
 
 from compliance_copilot.config import EVAL_DIR, INDEX_DIR, PROCESSED_DIR, load_settings
 from compliance_copilot.embeddings import EmbeddingError, make_embedder
-from compliance_copilot.evaluation import describe_reference, first_hit_rank, hit_at_k, load_questions, matches
+from compliance_copilot.evaluation import article_level, describe_reference, first_hit_rank, hit_at_k, load_questions, matches
 from compliance_copilot.index import LEXICON_TARGETS, SEARCH_MODES, IndexNotReadyError, SearchResult, load_chunks, search
 
 DEPTH = 20
@@ -53,21 +54,28 @@ def main() -> int:
     mode, lexicon = args.mode or settings.search_mode, args.lexicon or settings.search_lexicon
     limit = settings.search_max_per_article if args.max_per_article is None else (args.max_per_article or None)
     ranks: list[int | None] = []
+    paragraph_ranks: list[int | None] = []
     print(f"{len(questions)} questions, recherche « {mode} », lexique « {lexicon} », au plus {limit or 'tous les'} passages par article, "
           f"rang cherché parmi les {DEPTH} premiers passages\n")
     for question in questions:
         try:
-            results = search(question.question, INDEX_DIR, embedder, k=DEPTH, mode=mode, lexicon=lexicon, max_per_article=limit)
+            results = search(question.question, INDEX_DIR, embedder, k=DEPTH, mode=mode, lexicon=lexicon, max_per_article=limit,
+                             first_paragraph=settings.search_first_paragraph)
         except (IndexNotReadyError, EmbeddingError) as error:
             print(f"[ERREUR] {error}")
             return 1
-        rank = first_hit_rank([result.id for result in results], question.expected)
+        result_ids = [result.id for result in results]
+        rank = first_hit_rank(result_ids, article_level(question.expected))
+        paragraph_rank = first_hit_rank(result_ids, question.expected)
         ranks.append(rank)
+        paragraph_ranks.append(paragraph_rank)
         status = f"rang {rank}" if rank else "non trouvé"
+        if question.expected != article_level(question.expected):
+            status += f" (paragraphe : {f'rang {paragraph_rank}' if paragraph_rank else 'non trouvé'})"
         partial = "  (réponse seulement partielle dans le corpus)" if question.coverage == "partiel" else ""
         print(f"{question.id}  {status:<11} {question.question}{partial}")
         print(f"     attendu : {' ou '.join(describe_reference(ref) for ref in question.expected)}")
-        if rank is None or rank > 5:
+        if paragraph_rank is None or paragraph_rank > 5:
             found = " · ".join(
                 f"{result.rank}. {describe_result(result)} ({result.score:.3f})" for result in results[:SHOWN_WHEN_MISSED]
             )
@@ -76,6 +84,9 @@ def main() -> int:
     total = len(questions)
     print(f"\nhit@1 : {hit_at_k(ranks, 1)}/{total}   (l'article attendu arrive en premier)")
     print(f"hit@5 : {hit_at_k(ranks, 5)}/{total}   (l'article attendu est dans les 5 premiers passages)")
+    print(f"hit@8 : {hit_at_k(ranks, 8)}/{total}   (l'article attendu est dans les 8 premiers passages)")
+    print(f"Niveau paragraphe : hit@5 {hit_at_k(paragraph_ranks, 5)}/{total}, hit@8 {hit_at_k(paragraph_ranks, 8)}/{total}   "
+          "(le paragraphe précisé, quand la question en précise un)")
     if off_topic:
         print(f"Questions hors sujet, sans article attendu, non comptées : {', '.join(off_topic)}")
     return 0

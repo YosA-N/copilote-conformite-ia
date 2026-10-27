@@ -27,10 +27,13 @@ class Settings:
     llm_num_ctx: int = 8192  # context size in tokens: passages + question + answer
     llm_num_gpu: int | None = 99  # model layers on the GPU (99 = all); None lets Ollama decide
     llm_temperature: float = 0.1
-    llm_max_tokens: int = 1500  # room for the verbatim extracts, then the answer
+    llm_max_tokens: int = 2000  # room for the verbatim extracts, then the answer (1500 until session 6)
     search_mode: str = "vector"  # "vector" or "hybrid" (vectors + BM25, measured worse in session 5)
     search_lexicon: str = "all"  # "off", "keywords" or "all": add legal wording to the question
     search_max_per_article: int | None = 2  # at most 2 chunks of the same article among the passages
+    search_k: int = 5  # passages given to the language model (8 measured at session 6: slower, no gain with the lexicon)
+    search_first_paragraph: bool = True  # add the first paragraph of an article when a later one is kept (session 6)
+    answer_judge: bool = True  # second short call: do the verified extracts answer the question directly?
 
 
 def optional_int(value: str | None) -> int | None:
@@ -50,8 +53,11 @@ def load_settings() -> Settings:
         llm_num_ctx=int(os.getenv("LLM_NUM_CTX", "8192")),
         llm_num_gpu=optional_int(os.getenv("LLM_NUM_GPU", "99")),
         llm_temperature=float(os.getenv("LLM_TEMPERATURE", "0.1")),
-        llm_max_tokens=int(os.getenv("LLM_MAX_TOKENS", "1500")),
+        llm_max_tokens=int(os.getenv("LLM_MAX_TOKENS", "2000")),
         search_mode=os.getenv("SEARCH_MODE", "vector").strip().lower(),
         search_lexicon=os.getenv("SEARCH_LEXICON", "all").strip().lower(),
         search_max_per_article=optional_int(os.getenv("SEARCH_MAX_PER_ARTICLE", "2")),
+        search_k=int(os.getenv("SEARCH_K", "5")),
+        search_first_paragraph=os.getenv("SEARCH_FIRST_PARAGRAPH", "on").strip().lower() in {"on", "1", "true", "oui"},
+        answer_judge=os.getenv("ANSWER_JUDGE", "on").strip().lower() in {"on", "1", "true", "oui"},
     )

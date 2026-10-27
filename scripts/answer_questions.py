@@ -5,6 +5,7 @@ The same pipeline as scripts/ask.py is used. Run scripts/build_index.py first.
 
 Usage, from the repository root:
     .venv\\Scripts\\python scripts\\answer_questions.py [--version v1]
+    .venv\\Scripts\\python scripts\\answer_questions.py --questions eval\\questions_v1.jsonl --version heldout_v3
 """
 
 import argparse
@@ -12,16 +13,17 @@ import json
 import sys
 import urllib.request
 from datetime import datetime
+from pathlib import Path
 
 from compliance_copilot.config import EVAL_DIR, INDEX_DIR, load_settings
 from compliance_copilot.embeddings import EmbeddingError, make_embedder
 from compliance_copilot.evaluation import describe_reference, first_hit_rank, load_questions
 from compliance_copilot.index import IndexNotReadyError
 from compliance_copilot.llm import LLMError, make_chat_model
-from compliance_copilot.rag import RagAnswer, answer_question, render_footer
+from compliance_copilot.rag import ABSTENTION, RagAnswer, answer_question, render_footer
 from compliance_copilot.sources import SOURCES
 
-QUESTION_FILES = ["questions_v0.jsonl", "questions_offtopic_v0.jsonl"]
+QUESTION_FILES = [EVAL_DIR / "questions_v0.jsonl", EVAL_DIR / "questions_offtopic_v0.jsonl"]
 WARNING = (
     "> ⚠️ **Attention : certaines réponses de ce fichier sont fausses.** Ce sont les réponses brutes d'une version "
     "expérimentale du copilote, conservées telles quelles pour mesurer ses erreurs. Ne les utilisez pas comme "
@@ -77,29 +79,38 @@ def section(question, answer: RagAnswer) -> list[str]:
         "</details>",
         "",
         f"Temps : recherche {answer.search_seconds:.1f} s · génération {answer.generation_seconds:.1f} s "
-        f"({generation.prompt_tokens} tokens lus, {generation.completion_tokens} écrits, {generation.tokens_per_second:.1f} tokens/s)",
+        f"({generation.prompt_tokens} tokens lus, {generation.completion_tokens} écrits, {generation.tokens_per_second:.1f} tokens/s)"
+        + (f" · contrôle de pertinence {answer.judge_seconds:.1f} s" if answer.judge_seconds else ""),
         "",
     ]
+
+
+def refusal_label(answer: RagAnswer) -> str:
+    return "oui" if answer.refused else "abstention" if answer.abstained else "non"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Écrit les réponses du copilote aux questions de test.")
     parser.add_argument("--version", default="v1", help="suffixe du fichier écrit : eval/answers_<version>.md")
+    parser.add_argument("--questions", type=Path, nargs="+", default=QUESTION_FILES,
+                        help="fichiers de questions à poser (par défaut : questions v0 et hors sujet v0)")
     args = parser.parse_args()
     output = EVAL_DIR / f"answers_{args.version}.md"
 
     settings = load_settings()
     embedder = make_embedder(settings, settings.query_embedding_device)
     chat_model = make_chat_model(settings)
-    questions = [question for name in QUESTION_FILES for question in load_questions(EVAL_DIR / name)]
+    question_sets = [(path, load_questions(path)) for path in args.questions]
+    questions = [question for _, loaded in question_sets for question in loaded]
 
     sections, summary = [], []
     for question in questions:
         print(f"{question.id} : {question.question}", flush=True)
         try:
             answer = answer_question(
-                question.question, INDEX_DIR, embedder, chat_model, mode=settings.search_mode, lexicon=settings.search_lexicon,
-                max_per_article=settings.search_max_per_article,
+                question.question, INDEX_DIR, embedder, chat_model, k=settings.search_k, mode=settings.search_mode,
+                lexicon=settings.search_lexicon, max_per_article=settings.search_max_per_article, judge=settings.answer_judge,
+                first_paragraph=settings.search_first_paragraph,
             )
         except (IndexNotReadyError, EmbeddingError, LLMError) as error:
             print(f"[ERREUR] {error}")
@@ -107,9 +118,9 @@ def main() -> int:
         sections += section(question, answer)
         alerts = "; ".join(answer.warnings) if answer.warnings else "—"
         verified = f"{len(answer.verified_extracts)}/{len(answer.extracts)}"
-        total = answer.search_seconds + answer.generation_seconds
-        summary.append(f"| {question.id} | {question.question} | {verified} | {'oui' if answer.refused else 'non'} | {alerts} | {total:.0f} s |")
-        print(f"     {total:.0f} s, extraits vérifiés {verified}, refus : {'oui' if answer.refused else 'non'}", flush=True)
+        total = answer.search_seconds + answer.generation_seconds + answer.judge_seconds
+        summary.append(f"| {question.id} | {question.question} | {verified} | {refusal_label(answer)} | {alerts} | {total:.0f} s |")
+        print(f"     {total:.0f} s, extraits vérifiés {verified}, refus : {refusal_label(answer)}", flush=True)
 
     versions = ", ".join(f"{source.name} du {source.version_date}" for source in SOURCES)
     if settings.llm_num_gpu is None:
@@ -133,10 +144,18 @@ def main() -> int:
         "absent des extraits, exception reformulée, liste de cas incomplète, obligation d'un fournisseur sans le nommer, "
         "règlement non nommé quand la réponse mêle RGPD et AI Act",
         f"- Recherche : `{settings.embedding_model}` (sur {settings.query_embedding_device.upper()}), mode « {settings.search_mode} », "
-        f"lexique « {settings.search_lexicon} », 5 passages par question, "
-        + (f"{settings.search_max_per_article} au plus par article" if settings.search_max_per_article else "sans limite par article"),
+        f"lexique « {settings.search_lexicon} », {settings.search_k} passages par question, "
+        + (f"{settings.search_max_per_article} au plus par article" if settings.search_max_per_article else "sans limite par article")
+        + (", 1er paragraphe ajouté quand un paragraphe suivant d'un article découpé est retenu" if settings.search_first_paragraph else ""),
+        "- Contrôle de pertinence (juge) : "
+        + ("activé ; si le modèle juge que les extraits ne répondent pas directement à la question, la réponse est remplacée par "
+           f"« {ABSTENTION} »" if settings.answer_judge else "désactivé"),
         f"- Corpus : versions consolidées {versions}",
-        "- Questions : `eval/questions_v0.jsonl` (10) et `eval/questions_offtopic_v0.jsonl` (2, hors sujet)",
+        "- Questions : " + ", ".join(
+            f"`eval/{path.name}` ({sum(1 for q in loaded if q.expected)}"
+            + (f" + {sum(1 for q in loaded if not q.expected)} hors sujet" if any(not q.expected for q in loaded) else "") + ")"
+            for path, loaded in question_sets
+        ),
         "",
         "| # | Question | Extraits vérifiés | Refus | Alertes du code | Temps total |",
         "|---|---|---|---|---|---|",

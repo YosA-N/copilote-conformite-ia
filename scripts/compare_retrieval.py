@@ -1,8 +1,10 @@
-"""Compare several search configurations on the v0 and v1 questions (hit@1, hit@5, ranks).
+"""Compare several search configurations on the v0 and v1 questions (hit@1, hit@5, hit@8, ranks).
 
+Two levels: the article, and the paragraph when a question names the one that matters (session 6).
 Prints Markdown tables. The question vectors computed by Ollama on the CPU vary very slightly
 from one run to the next, which can swap two passages with almost the same score: with
 --repeat N, everything is measured N times and a varying result is shown as a range ("11–12").
+The hybrid configurations, rejected at session 5, are no longer measured (see eval/results_v1.md).
 Run scripts/build_index.py first.
 
 Usage, from the repository root:
@@ -14,18 +16,17 @@ import sys
 
 from compliance_copilot.config import EVAL_DIR, INDEX_DIR, load_settings
 from compliance_copilot.embeddings import EmbeddingError, make_embedder
-from compliance_copilot.evaluation import first_hit_rank, hit_at_k, load_questions
+from compliance_copilot.evaluation import article_level, first_hit_rank, hit_at_k, load_questions
 from compliance_copilot.index import IndexNotReadyError, search
 
 DEPTH = 20
-CONFIGS = [  # (label, mode, lexicon, at most N chunks of the same article)
-    ("vecteurs seuls (départ)", "vector", "off", None),
-    ("vecteurs + lexique", "vector", "all", None),
-    ("vecteurs + lexique + 2 par article", "vector", "all", 2),
-    ("hybride", "hybrid", "off", None),
-    ("hybride + lexique (mots-clés)", "hybrid", "keywords", None),
-    ("hybride + lexique (partout)", "hybrid", "all", None),
+CONFIGS = [  # (label, mode, lexicon, at most N chunks of the same article, first paragraph of a split article added)
+    ("vecteurs seuls (départ)", "vector", "off", None, False),
+    ("vecteurs + lexique", "vector", "all", None, False),
+    ("vecteurs + lexique + 2 par article", "vector", "all", 2, False),
+    ("vecteurs + lexique + 2 par article + 1er paragraphe", "vector", "all", 2, True),
 ]
+LEVELS = [("article", True), ("paragraphe", False)]
 SETS = [("v0", "questions_v0.jsonl"), ("v1", "questions_v1.jsonl")]
 
 
@@ -56,45 +57,54 @@ def main() -> int:
     args = parser.parse_args()
     settings = load_settings()
     question_sets = {name: [q for q in load_questions(EVAL_DIR / file) if q.expected] for name, file in SETS}
-    runs: list[dict[tuple[str, str], list[int | None]]] = []
+    runs: list[dict[tuple[str, str, str], list[int | None]]] = []
     for run in range(args.repeat):
         embedder = CachedEmbedder(make_embedder(settings, settings.query_embedding_device))  # fresh vectors each run
-        ranks: dict[tuple[str, str], list[int | None]] = {}
-        for label, mode, lexicon, limit in CONFIGS:
+        ranks: dict[tuple[str, str, str], list[int | None]] = {}
+        for label, mode, lexicon, limit, first_paragraph in CONFIGS:
             print(f"… mesure {run + 1}/{args.repeat} : {label}", file=sys.stderr, flush=True)
             for name, questions in question_sets.items():
                 try:
-                    ranks[label, name] = [
-                        first_hit_rank(
-                            [r.id for r in search(q.question, INDEX_DIR, embedder, k=DEPTH, mode=mode, lexicon=lexicon, max_per_article=limit)],
-                            q.expected,
-                        )
+                    found = [
+                        [r.id for r in search(q.question, INDEX_DIR, embedder, k=DEPTH, mode=mode, lexicon=lexicon, max_per_article=limit,
+                                              first_paragraph=first_paragraph)]
                         for q in questions
                     ]
                 except (IndexNotReadyError, EmbeddingError) as error:
                     print(f"[ERREUR] {error}")
                     return 1
+                for level, by_article in LEVELS:
+                    ranks[label, name, level] = [
+                        first_hit_rank(ids, article_level(q.expected) if by_article else q.expected) for ids, q in zip(found, questions)
+                    ]
         runs.append(ranks)
 
     print(f"Mesures répétées {args.repeat} fois ; « a–b » = résultat variable d'une mesure à l'autre.\n")
-    header = " | ".join(f"{name} hit@1 | {name} hit@5" for name, _ in SETS)
-    print(f"| Configuration | {header} |")
-    print("|---|" + "---|" * (2 * len(SETS)))
-    for label, *_ in CONFIGS:
-        cells = " | ".join(
-            f"{spread([hit_at_k(r[label, name], 1) for r in runs])}/{len(question_sets[name])} | "
-            f"{spread([hit_at_k(r[label, name], 5) for r in runs])}/{len(question_sets[name])}"
-            for name, _ in SETS
-        )
-        print(f"| {label} | {cells} |")
+    for level, _ in LEVELS:
+        print(f"Niveau {level} :\n")
+        header = " | ".join(f"{name} hit@1 | {name} hit@5 | {name} hit@8" for name, _ in SETS)
+        print(f"| Configuration | {header} |")
+        print("|---|" + "---|" * (3 * len(SETS)))
+        for label, *_ in CONFIGS:
+            cells = " | ".join(
+                " | ".join(f"{spread([hit_at_k(r[label, name, level], k) for r in runs])}/{len(question_sets[name])}" for k in (1, 5, 8))
+                for name, _ in SETS
+            )
+            print(f"| {label} | {cells} |")
+        print()
 
-    print("\nRang du premier article attendu (— = pas dans les 20 premiers) :\n")
+    print("Rang du premier article attendu, puis du paragraphe précisé s'il diffère (— = pas dans les 20 premiers) :\n")
     print("| Question | " + " | ".join(label for label, *_ in CONFIGS) + " |")
     print("|---|" + "---|" * len(CONFIGS))
     for name, questions in question_sets.items():
         for index, question in enumerate(questions):
-            cells = " | ".join(spread([r[label, name][index] or "—" for r in runs]) for label, *_ in CONFIGS)
-            print(f"| {question.id} | {cells} |")
+            cells = []
+            for label, *_ in CONFIGS:
+                cell = spread([r[label, name, "article"][index] or "—" for r in runs])
+                if question.expected != article_level(question.expected):
+                    cell += f" (§ {spread([r[label, name, 'paragraphe'][index] or '—' for r in runs])})"
+                cells.append(cell)
+            print(f"| {question.id} | {' | '.join(cells)} |")
     return 0
 
 

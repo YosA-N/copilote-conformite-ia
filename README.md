@@ -69,6 +69,8 @@ Un long article découpé en paragraphes pouvait occuper à lui seul les 5 passa
 
 Le copilote cherche les 5 passages les plus proches, numérotés [1] à [5]. Le modèle `qwen3:4b-instruct` recopie d'abord les phrases exactes des passages qui répondent (**extraits**), puis rédige sa réponse à partir de ces seules phrases, en citant les passages.
 
+**Contrôle de pertinence** : un second appel court demande au modèle si les extraits retenus répondent **directement** à la question (OUI ou NON). Si c'est NON, la réponse est remplacée par « Les passages trouvés ne traitent pas directement de votre question. », et les passages consultés restent affichés. Ce contrôle évite des réponses assurées alors que le bon article n'a pas été trouvé, mais il est imparfait : il laisse passer certaines erreurs et peut s'abstenir sur une réponse partiellement juste. Il se désactive avec `ANSWER_JUDGE=off` dans `.env`. Avec lui, la réponse s'affiche d'un bloc après le contrôle, et non au fil de l'écriture.
+
 Le code, et non le modèle :
 - **vérifie chaque extrait mot pour mot** dans le passage cité (seuls les espaces, le style des apostrophes et des guillemets, les majuscules et les coupures marquées « … » sont tolérés) ;
 - **remplace la réponse par « Les textes trouvés ne permettent pas de répondre à cette question. »** si aucun extrait n'est vérifié : une réponse sans appui dans les textes n'est jamais affichée, même en partie ;
@@ -87,9 +89,26 @@ Le code, et non le modèle :
 
 Limite : vérifier un extrait prouve que la phrase existe dans la loi, pas qu'elle répond bien à la question. Ces contrôles sont de simples signaux, sans compréhension du sens : ils peuvent laisser passer une erreur ou signaler une phrase juste. La relecture humaine reste nécessaire.
 
-Comptez environ 30 à 45 secondes par question avec une carte graphique de 4 Go, ordinateur branché sur secteur (sur batterie, Windows peut brider la carte graphique et une réponse peut prendre plusieurs minutes).
+Comptez environ 40 secondes par question (jusqu'à 1 min 45 pour les longues listes) avec une carte graphique de 4 Go, ordinateur branché sur secteur (sur batterie, Windows peut brider la carte graphique et une réponse peut prendre plusieurs minutes).
 
-`scripts\answer_questions.py --version v3` pose les 10 questions de test et 2 questions hors sujet, puis enregistre les réponses brutes dans `eval/answers_v3.md` pour relecture (`eval/answers_v0.md` à `eval/answers_v2.md` gardent les versions précédentes, relues dans `eval/review_v0.md` à `eval/review_v2.md`). Les mesures avant/après sont dans `eval/results_v1.md`.
+`scripts\answer_questions.py --version v3` pose les 10 questions de test et 2 questions hors sujet, puis enregistre les réponses brutes dans `eval/answers_v3.md` pour relecture (`eval/answers_v0.md` à `eval/answers_v2.md` gardent les versions précédentes). L'option `--questions` pose un autre fichier de questions, par exemple `--questions eval\questions_v1.jsonl --version heldout_v3`. Les mesures avant/après sont dans `eval/results_v1.md`.
+
+### Relecture des réponses
+
+Chaque version est relue par un humain avec la même grille, décrite dans `eval/rubric.md`, qui donne 4 verdicts : **juste**, **partiel**, **faux** ou **dangereux**. Une réponse est dangereuse si elle pourrait faire agir quelqu'un à tort, par exemple en inventant ou en niant une obligation. Les relectures sont enregistrées dans `eval/reviews/<version>.jsonl`, une ligne par question. Le script suivant en fait le tableau :
+
+```powershell
+.venv\Scripts\python scripts\review_summary.py --check
+```
+
+| Version | Juste | Partiel | Faux | Dangereux |
+|---|---|---|---|---|
+| v0 (séance 4) | 5 | 1 | 3 | 3 |
+| v1 (séance 5) | 9 | 2 | 0 | 1 |
+| v2 (séance 5 bis) | 6 | 5 | 0 | 1 |
+| v3 (séance 5 ter) | 9 | 3 | 0 | 0 |
+
+Ces chiffres portent sur les 12 questions qui ont servi à régler le système : ils sont donc optimistes. Un examen final de 20 nouvelles questions (`eval/questions_v2.jsonl`) est mis de côté et ne sera utilisé qu'à la fin du projet.
 
 ## Limites connues
 
@@ -105,7 +124,8 @@ Comptez environ 30 à 45 secondes par question avec une carte graphique de 4 Go,
 
   Les durées, montants et modalités concrètes viennent souvent de ces autres textes.
 - **Recherche imparfaite** : le passage utile n'est pas toujours parmi les 5 retenus. Par exemple, l'art. 32 (sécurité) n'est pas trouvé pour une des questions de test.
-- **Lenteur** : comptez 30 à 45 secondes par réponse avec une carte graphique de 4 Go, davantage sans carte graphique.
+- **Lenteur** : comptez environ 40 secondes par réponse (contrôle de pertinence compris) avec une carte graphique de 4 Go ; les questions à longue liste dépassent la minute. C'est davantage sans carte graphique.
+- **Sur-apprentissage** : le système a été réglé sur les questions de test. Sur des questions qu'il n'avait jamais vues, la version de la séance 5 ter n'avait que 6 réponses justes sur 20, dont 4 dangereuses (`eval/results_v2.md`). Seul l'examen final, mis de côté, mesurera honnêtement la version actuelle.
 
 ## Mémoire de la carte graphique
 
@@ -116,7 +136,7 @@ Le modèle de génération se règle dans `.env` :
 | `LLM_NUM_CTX` | `8192` | Taille du contexte en tokens : passages + question + réponse |
 | `LLM_NUM_GPU` | `99` | Couches du modèle placées sur la carte graphique (99 = toutes, le plus rapide) |
 | `LLM_TEMPERATURE` | `0.1` | Basse : réponses plus stables et plus fidèles aux passages |
-| `LLM_MAX_TOKENS` | `1500` | Longueur maximale (extraits + réponse) ; une réponse coupée est signalée |
+| `LLM_MAX_TOKENS` | `2000` | Longueur maximale (extraits + réponse) ; une réponse coupée est signalée |
 
 Avec ces valeurs, `qwen3:4b-instruct` occupe 3,68 Go sur une carte de 4 Go (`ministral-3:3b` : 3,87 Go). Si le copilote affiche « Mémoire insuffisante », par exemple parce qu'une autre application utilise la carte graphique, essayez dans cet ordre :
 1. baissez `LLM_NUM_CTX` à `6144` (mesuré : 3,39 Go avec qwen, 3,66 Go avec ministral) ou `4096` (3,10 Go avec qwen, 3,45 Go avec ministral) ;
