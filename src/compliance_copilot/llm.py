@@ -1,21 +1,27 @@
 """Generate text with a language model (LLM), behind one small interface.
 
-The model and its settings are chosen in .env (LLM_MODEL, LLM_NUM_CTX, LLM_NUM_GPU...).
-OllamaChatModel is the only implementation for now; another backend only needs the
-attributes and the generate() method of ChatModel.
+The model and its settings are chosen in .env (LLM_BACKEND, LLM_MODEL, LLM_NUM_CTX, LLM_NUM_GPU...).
+Two backends share the attributes and the generate() method of ChatModel:
+- OllamaChatModel, the local model: the default, and the only one meant for real questions;
+- OpenAICompatibleChatModel, an OpenAI-compatible API such as Groq, used only for the session 7
+  experiment (does a bigger model write better?) on the test questions, never on personal data.
 """
 
 import json
+import os
 import re
+import sys
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from compliance_copilot.config import Settings
+from compliance_copilot.config import LLM_BACKENDS, Settings
 
 OUT_OF_MEMORY = re.compile(r"out of memory|unable to allocate|cudamalloc|more system memory", re.IGNORECASE)
+RETRYABLE_STATUS = {429, 500, 502, 503, 504}  # rate limit or a passing server error: wait, then try again
 
 
 @dataclass
@@ -131,8 +137,127 @@ class OllamaChatModel:
         )
 
 
-def make_chat_model(settings: Settings) -> OllamaChatModel:
-    """The language model configured in .env."""
+class OpenAICompatibleChatModel:
+    """Chat with a model behind an OpenAI-compatible API (POST /chat/completions, not streamed), e.g. Groq.
+
+    The API key is read from the environment variable whose NAME is given (GROQ_API_KEY, from .env).
+    It is kept private: never in repr(), in an error message or in a file. Rate limits (HTTP 429) and
+    passing server errors are waited for (retry-after header, else 2, 4, 8… s) and tried again; the
+    time spent waiting is counted apart, in waited_seconds, so that it does not count as generation time.
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        api_key_env: str,
+        num_ctx: int = 8192,
+        temperature: float = 0.1,
+        max_tokens: int = 700,
+        timeout: float = 300,
+        max_attempts: int = 8,
+        max_wait: float = 300,
+        sleep: Callable[[float], None] = time.sleep,
+    ):
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.api_key_env = api_key_env
+        self.num_ctx = num_ctx  # kept for fit_passages, so that the passages stay those of the local model
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.timeout = timeout
+        self.max_attempts = max_attempts
+        self.max_wait = max_wait  # a longer wait means the quota of the day is used up: stop instead
+        self._sleep = sleep
+        self._api_key = os.environ.get(api_key_env, "").strip()
+        self.waited_seconds = 0.0
+        self.rate_limits: dict[str, str] = {}  # x-ratelimit-* headers of the last answer (they hold no secret)
+
+    def __repr__(self) -> str:
+        return f"OpenAICompatibleChatModel(base_url={self.base_url!r}, model={self.model!r}, api_key_env={self.api_key_env!r})"
+
+    def _hide_key(self, text: str) -> str:
+        return text.replace(self._api_key, "***") if self._api_key else text
+
+    def _explain(self, status: int, detail: str) -> str:
+        if status in (401, 403):
+            return f"Clé refusée par l'API (HTTP {status}) : vérifiez {self.api_key_env} dans le fichier .env."
+        if status == 404:
+            return f"Modèle {self.model} inconnu de l'API {self.base_url} (HTTP 404) : vérifiez LLM_MODEL."
+        return self._hide_key(f"L'API {self.base_url} a renvoyé une erreur (HTTP {status}) : {detail}")
+
+    def _wait_seconds(self, retry_after: str | None, attempt: int) -> float:
+        try:
+            return max(float(retry_after), 1.0) if retry_after else min(2.0**attempt, 60.0)
+        except ValueError:
+            return min(2.0**attempt, 60.0)
+
+    def generate(self, messages: list[dict], on_text: Callable[[str], None] | None = None) -> Generation:
+        if not self._api_key:
+            raise LLMError(f"Clé absente : ajoutez {self.api_key_env}=… dans le fichier .env (jamais dans le code ni dans Git).")
+        body = json.dumps(
+            {"model": self.model, "messages": messages, "temperature": self.temperature, "max_tokens": self.max_tokens, "stream": False}
+        ).encode("utf-8")
+        for attempt in range(1, self.max_attempts + 1):
+            request = urllib.request.Request(
+                f"{self.base_url}/chat/completions",
+                data=body,
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {self._api_key}"},
+            )
+            start = time.perf_counter()
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                    data = json.load(response)
+                    self.rate_limits = {k.lower(): v for k, v in response.headers.items() if k.lower().startswith("x-ratelimit")}
+                seconds = time.perf_counter() - start
+                break
+            except urllib.error.HTTPError as error:
+                detail = error.read().decode("utf-8", errors="replace")[:300]
+                if error.code not in RETRYABLE_STATUS or attempt == self.max_attempts:
+                    raise LLMError(self._explain(error.code, detail)) from None
+                wait = self._wait_seconds(error.headers.get("retry-after"), attempt)
+                if wait > self.max_wait:
+                    raise LLMError(
+                        f"Quota de l'API atteint : il faudrait attendre {wait / 60:.0f} min (limite par jour probable). "
+                        "Relancez plus tard."
+                    ) from None
+                reason = "limite de débit atteinte" if error.code == 429 else f"erreur passagère du serveur (HTTP {error.code})"
+                print(f"[API] {reason}, attente de {wait:.0f} s (essai {attempt}/{self.max_attempts})", file=sys.stderr, flush=True)
+                self._sleep(wait)
+                self.waited_seconds += wait
+            except (urllib.error.URLError, TimeoutError) as error:
+                raise LLMError(self._hide_key(f"L'API {self.base_url} ne répond pas ({error}). Vérifiez la connexion.")) from None
+
+        choice = data["choices"][0]
+        text = choice.get("message", {}).get("content") or ""
+        if on_text and text:
+            on_text(text)
+        usage = data.get("usage", {})
+        completion_tokens = usage.get("completion_tokens", 0)
+        writing_seconds = usage.get("completion_time") or seconds  # Groq gives the writing time itself
+        return Generation(
+            text=text,
+            prompt_tokens=usage.get("prompt_tokens", 0),
+            completion_tokens=completion_tokens,
+            seconds=seconds,
+            tokens_per_second=completion_tokens / writing_seconds if writing_seconds else 0.0,
+            truncated=choice.get("finish_reason") == "length",
+        )
+
+
+def make_chat_model(settings: Settings) -> OllamaChatModel | OpenAICompatibleChatModel:
+    """The language model configured in .env: local Ollama by default."""
+    if settings.llm_backend not in LLM_BACKENDS:
+        raise LLMError(f"LLM_BACKEND doit valoir {' ou '.join(LLM_BACKENDS)} (reçu : {settings.llm_backend}).")
+    if settings.llm_backend == "openai":
+        return OpenAICompatibleChatModel(
+            settings.llm_api_base_url,
+            settings.llm_model,
+            settings.llm_api_key_env,
+            num_ctx=settings.llm_num_ctx,
+            temperature=settings.llm_temperature,
+            max_tokens=settings.llm_max_tokens,
+        )
     return OllamaChatModel(
         settings.ollama_base_url,
         settings.llm_model,

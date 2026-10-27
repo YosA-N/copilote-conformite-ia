@@ -143,6 +143,31 @@ Avec ces valeurs, `qwen3:4b-instruct` occupe 3,68 Go sur une carte de 4 Go (`min
 2. baissez `LLM_NUM_GPU`, par exemple à `20` : une partie du modèle passe alors sur le processeur ;
 3. laissez `LLM_NUM_GPU` vide : Ollama choisit lui-même, mais la réponse est environ 4 fois plus lente.
 
+## Modèle distant : une expérience seulement (séance 7)
+
+**Le copilote reste local par défaut** (`LLM_BACKEND=ollama`) : vos questions ne quittent pas votre ordinateur.
+
+Pour une seule expérience (un modèle plus gros rédige-t-il mieux ?), le projet peut aussi appeler une API compatible OpenAI, ici le niveau gratuit de [Groq](https://groq.com), avec `llama-3.3-70b-versatile`.
+- Cette API n'a servi **qu'aux questions de test** du dépôt (`eval/questions_v0.jsonl`, `questions_offtopic_v0.jsonl`, `questions_v1.jsonl`) et aux extraits de loi trouvés par la recherche locale.
+- **Elle n'a reçu aucune donnée personnelle.**
+- **N'y posez jamais de question contenant des données personnelles** (nom, situation d'une personne, données de clients ou d'adhérents…).
+
+Ce que dit Groq de ses données (page *Your Data in GroqCloud*, consultée le 27/10/2026) :
+- par défaut, les requêtes ne sont pas conservées ;
+- mais des journaux de fiabilité et d'abus peuvent être gardés jusqu'à 30 jours ;
+- l'option « Zero Data Retention », dans les réglages de l'organisation, les supprime.
+
+Réglages de l'expérience, à donner seulement pour la commande, sans changer `.env` :
+
+| Réglage | Valeur | Rôle |
+|---|---|---|
+| `LLM_BACKEND` | `openai` | API compatible OpenAI au lieu d'Ollama |
+| `LLM_API_BASE_URL` | `https://api.groq.com/openai/v1` | Adresse de l'API |
+| `LLM_API_KEY_ENV` | `GROQ_API_KEY` | **Nom** de la variable de `.env` qui contient la clé (jamais la clé elle-même) |
+| `LLM_MODEL` | `llama-3.3-70b-versatile` | Modèle distant |
+
+La clé se met seulement dans `.env`, qui est ignoré par Git. Avant chaque commit, `scripts\scan_secrets.py` vérifie qu'aucune clé n'est sur le point d'être publiée. Quand l'API impose une limite de débit, le copilote attend le délai demandé, puis réessaie. Ce temps d'attente n'est pas compté dans les mesures de temps.
+
 ## Sources juridiques
 
 | Texte | Version consolidée utilisée | Contenu repris |

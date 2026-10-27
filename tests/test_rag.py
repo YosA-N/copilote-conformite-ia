@@ -602,6 +602,23 @@ def test_nothing_is_streamed_before_the_verdict_of_the_judge(passages):
     assert shown == []
 
 
+class WaitingChatModel(ScriptedChatModel):
+    """Like an API backend: each call first « waits » for the rate limits (counted in waited_seconds)."""
+
+    waited_seconds = 0.0
+
+    def generate(self, messages, on_text=None):
+        self.waited_seconds += 30.0
+        return super().generate(messages, on_text)
+
+
+def test_rate_limit_waits_are_not_counted_as_generation_time(passages):
+    answer = answer_from_passages(QUESTION, passages, WaitingChatModel(GOOD_REPLY, ["OUI"]), judge=True)
+
+    assert answer.wait_seconds == 60.0  # answer and judge
+    assert answer.generation_seconds < 5 and answer.judge_seconds < 5
+
+
 # ---------------------------------------------------------------- whole answer
 
 

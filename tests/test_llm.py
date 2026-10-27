@@ -1,5 +1,6 @@
-"""Offline tests for the Ollama chat model: the HTTP calls never leave the test."""
+"""Offline tests for the chat models (local Ollama and OpenAI-compatible API): the HTTP calls never leave the test."""
 
+import dataclasses
 import io
 import json
 import urllib.error
@@ -7,8 +8,8 @@ import urllib.error
 import pytest
 
 from compliance_copilot import llm
-from compliance_copilot.config import optional_int
-from compliance_copilot.llm import LLMError, OllamaChatModel
+from compliance_copilot.config import Settings, optional_int
+from compliance_copilot.llm import LLMError, OllamaChatModel, OpenAICompatibleChatModel, make_chat_model
 
 BASE_URL = "http://localhost:11434"
 MESSAGES = [{"role": "user", "content": "Dois-je désigner un DPO ?"}]
@@ -104,6 +105,129 @@ def test_out_of_memory_explains_which_settings_to_lower(monkeypatch):
 
     assert "Mémoire insuffisante" in str(error.value)
     assert "LLM_NUM_CTX" in str(error.value) and "LLM_NUM_GPU" in str(error.value)
+
+
+# ---------------------------------------------------------------- OpenAI-compatible API (session 7 experiment)
+
+API_URL = "https://api.example.test/openai/v1"
+KEY_ENV = "TEST_LLM_API_KEY"
+FAKE_KEY = "gsk_" + "x" * 32  # built at run time, so that this file does not look like a secret to the scanner
+
+
+class FakeAPIResponse(FakeResponse):
+    def __init__(self, data: dict, headers: dict | None = None):
+        super().__init__(json.dumps(data).encode("utf-8"))
+        self.headers = headers or {}
+
+
+def api_answer(text="Bonjour [1]", finish_reason="stop") -> dict:
+    return {
+        "choices": [{"message": {"role": "assistant", "content": text}, "finish_reason": finish_reason}],
+        "usage": {"prompt_tokens": 100, "completion_tokens": 10, "completion_time": 0.5},
+    }
+
+
+def api_error(code: int, retry_after: str | None = None) -> urllib.error.HTTPError:
+    headers = {"retry-after": retry_after} if retry_after else {}
+    return urllib.error.HTTPError(f"{API_URL}/chat/completions", code, "error", headers, io.BytesIO(b'{"error": {"message": "rate limit"}}'))
+
+
+@pytest.fixture
+def api_model(monkeypatch) -> tuple[OpenAICompatibleChatModel, list[float]]:
+    monkeypatch.setenv(KEY_ENV, FAKE_KEY)
+    sleeps: list[float] = []
+    return OpenAICompatibleChatModel(API_URL, "big-model", KEY_ENV, temperature=0.1, max_tokens=2000, sleep=sleeps.append), sleeps
+
+
+def answer_in_turn(monkeypatch, *outcomes) -> list:
+    """urlopen returns (or raises) each outcome in turn; the requests sent are recorded."""
+    requests, queue = [], list(outcomes)
+
+    def fake_urlopen(request, timeout):
+        requests.append(request)
+        outcome = queue.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(llm.urllib.request, "urlopen", fake_urlopen)
+    return requests
+
+
+def test_api_answer_is_read_with_its_statistics_and_rate_limits(monkeypatch, api_model):
+    model, _ = api_model
+    requests = answer_in_turn(monkeypatch, FakeAPIResponse(api_answer(), {"x-ratelimit-limit-tokens": "12000", "Content-Type": "json"}))
+    pieces = []
+
+    generation = model.generate(MESSAGES, on_text=pieces.append)
+
+    assert generation.text == "Bonjour [1]" and pieces == ["Bonjour [1]"]
+    assert (generation.prompt_tokens, generation.completion_tokens, generation.tokens_per_second) == (100, 10, 20.0)
+    assert generation.truncated is False
+    assert model.rate_limits == {"x-ratelimit-limit-tokens": "12000"}
+    body = json.loads(requests[0].data)
+    assert body == {"model": "big-model", "messages": MESSAGES, "temperature": 0.1, "max_tokens": 2000, "stream": False}
+    assert requests[0].full_url == f"{API_URL}/chat/completions"
+    assert requests[0].get_header("Authorization") == f"Bearer {FAKE_KEY}"
+
+
+def test_api_answer_stopped_by_the_length_limit_is_marked_as_truncated(monkeypatch, api_model):
+    model, _ = api_model
+    answer_in_turn(monkeypatch, FakeAPIResponse(api_answer(finish_reason="length")))
+
+    assert model.generate(MESSAGES).truncated is True
+
+
+def test_rate_limit_is_waited_for_then_tried_again(monkeypatch, api_model):
+    model, sleeps = api_model
+    requests = answer_in_turn(monkeypatch, api_error(429, retry_after="7"), api_error(503), FakeAPIResponse(api_answer()))
+
+    generation = model.generate(MESSAGES)
+
+    assert generation.text == "Bonjour [1]" and len(requests) == 3
+    assert sleeps == [7.0, 4.0]  # retry-after, then 2 ** attempt
+    assert model.waited_seconds == 11.0
+
+
+def test_quota_of_the_day_stops_instead_of_waiting_hours(monkeypatch, api_model):
+    model, sleeps = api_model
+    answer_in_turn(monkeypatch, api_error(429, retry_after="3600"))
+
+    with pytest.raises(LLMError, match="Quota de l'API atteint"):
+        model.generate(MESSAGES)
+    assert sleeps == []
+
+
+def test_refused_key_is_explained_without_showing_it(monkeypatch, api_model):
+    model, _ = api_model
+    answer_in_turn(monkeypatch, api_error(401))
+
+    with pytest.raises(LLMError) as error:
+        model.generate(MESSAGES)
+
+    assert KEY_ENV in str(error.value) and FAKE_KEY not in str(error.value)
+    assert FAKE_KEY not in repr(model) and FAKE_KEY not in str(vars(model).get("rate_limits"))
+
+
+def test_missing_key_is_reported_before_any_call(monkeypatch):
+    monkeypatch.delenv(KEY_ENV, raising=False)
+    requests = answer_in_turn(monkeypatch)
+
+    with pytest.raises(LLMError, match="Clé absente"):
+        OpenAICompatibleChatModel(API_URL, "big-model", KEY_ENV).generate(MESSAGES)
+    assert requests == []
+
+
+def test_backend_is_chosen_in_the_settings(monkeypatch):
+    monkeypatch.setenv(KEY_ENV, FAKE_KEY)
+    local = Settings(ollama_base_url=BASE_URL, llm_model="qwen3:4b-instruct", embedding_model="bge-m3")
+    api = dataclasses.replace(local, llm_backend="openai", llm_model="big-model", llm_api_base_url=API_URL, llm_api_key_env=KEY_ENV)
+
+    assert isinstance(make_chat_model(local), OllamaChatModel)  # local by default
+    remote = make_chat_model(api)
+    assert isinstance(remote, OpenAICompatibleChatModel) and remote.num_ctx == local.llm_num_ctx
+    with pytest.raises(LLMError, match="LLM_BACKEND"):
+        make_chat_model(dataclasses.replace(local, llm_backend="cloud"))
 
 
 def test_error_sent_in_the_middle_of_the_stream(monkeypatch):

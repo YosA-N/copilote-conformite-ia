@@ -80,7 +80,8 @@ def section(question, answer: RagAnswer) -> list[str]:
         "",
         f"Temps : recherche {answer.search_seconds:.1f} s · génération {answer.generation_seconds:.1f} s "
         f"({generation.prompt_tokens} tokens lus, {generation.completion_tokens} écrits, {generation.tokens_per_second:.1f} tokens/s)"
-        + (f" · contrôle de pertinence {answer.judge_seconds:.1f} s" if answer.judge_seconds else ""),
+        + (f" · contrôle de pertinence {answer.judge_seconds:.1f} s" if answer.judge_seconds else "")
+        + (f" · attente des limites de l'API {answer.wait_seconds:.0f} s (non comptée)" if answer.wait_seconds else ""),
         "",
     ]
 
@@ -134,9 +135,15 @@ def main() -> int:
         "",
         f"Générées le {datetime.now():%d/%m/%Y à %H:%M} par `scripts/answer_questions.py`, **sans aucune retouche**, pour relecture.",
         "",
-        f"- Génération : `{settings.llm_model}` via Ollama {ollama_version(settings.ollama_base_url)} — température "
-        f"{settings.llm_temperature}, contexte {settings.llm_num_ctx} tokens, couches sur la carte graphique : {gpu}, "
-        f"{settings.llm_max_tokens} tokens au plus par réponse",
+        (
+            f"- Génération : `{settings.llm_model}` via Ollama {ollama_version(settings.ollama_base_url)} — température "
+            f"{settings.llm_temperature}, contexte {settings.llm_num_ctx} tokens, couches sur la carte graphique : {gpu}, "
+            f"{settings.llm_max_tokens} tokens au plus par réponse"
+            if settings.llm_backend == "ollama"
+            else f"- Génération : `{settings.llm_model}` via l'API compatible OpenAI {settings.llm_api_base_url} (expérience de la "
+            f"séance 7, questions de test seulement) — température {settings.llm_temperature}, passages calculés pour un contexte de "
+            f"{settings.llm_num_ctx} tokens comme en local, {settings.llm_max_tokens} tokens au plus par réponse ; le juge est le même modèle"
+        ),
         "- Prompt : le modèle recopie d'abord les phrases exactes des passages (EXTRAITS), puis répond à partir d'elles "
         "seulement (RÉPONSE) ; le code vérifie chaque extrait mot pour mot et remplace par un refus une réponse sans extrait vérifié",
         "- Contrôles du code sur la réponse : citations [n], phrases trop éloignées des extraits vérifiés (si aucune citation), "
