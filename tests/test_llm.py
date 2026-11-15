@@ -182,12 +182,15 @@ def test_api_answer_stopped_by_the_length_limit_is_marked_as_truncated(monkeypat
 def test_rate_limit_is_waited_for_then_tried_again(monkeypatch, api_model):
     model, sleeps = api_model
     requests = answer_in_turn(monkeypatch, api_error(429, retry_after="7"), api_error(503), FakeAPIResponse(api_answer()))
+    clock = iter(range(0, 1000, 10))  # every reading of the clock is 10 s after the previous one
+    monkeypatch.setattr(llm.time, "perf_counter", lambda: float(next(clock)))
 
     generation = model.generate(MESSAGES)
 
     assert generation.text == "Bonjour [1]" and len(requests) == 3
     assert sleeps == [7.0, 4.0]  # retry-after, then 2 ** attempt
-    assert model.waited_seconds == 11.0
+    assert model.waited_seconds == 31.0  # the sleeps, plus the 10 s of each failed attempt
+    assert generation.seconds == 10.0  # the successful attempt only
 
 
 def test_quota_of_the_day_stops_instead_of_waiting_hours(monkeypatch, api_model):

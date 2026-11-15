@@ -176,7 +176,7 @@ class OpenAICompatibleChatModel:
         self.max_wait = max_wait  # a longer wait means the quota of the day is used up: stop instead
         self._sleep = sleep
         self._api_key = os.environ.get(api_key_env, "").strip()
-        self.waited_seconds = 0.0
+        self.waited_seconds = 0.0  # waits for the rate limits and time lost in failed attempts, counted apart
         self.rate_limits: dict[str, str] = {}  # x-ratelimit-* headers of the last answer (they hold no secret)
         self.last_usage: dict = {}  # usage of the last answer: tokens and the server's own timings (no secret)
 
@@ -243,6 +243,7 @@ class OpenAICompatibleChatModel:
                 seconds = time.perf_counter() - start
                 break
             except urllib.error.HTTPError as error:
+                self.waited_seconds += time.perf_counter() - start  # a failed attempt may take long before the error comes back
                 detail = error.read().decode("utf-8", errors="replace")[:300]
                 if error.code not in RETRYABLE_STATUS or attempt == self.max_attempts:
                     raise LLMError(self._explain(error.code, detail)) from None
