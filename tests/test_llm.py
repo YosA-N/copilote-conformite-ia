@@ -280,6 +280,41 @@ def test_models_list_errors_are_explained_without_the_key(monkeypatch, api_model
     assert KEY_ENV in str(error.value) and FAKE_KEY not in str(error.value)
 
 
+def test_retired_model_says_so_and_how_to_go_back_to_local_mode(monkeypatch, api_model):
+    model, _ = api_model
+    body = io.BytesIO(b'{"error": {"message": "The model `big-model` has been decommissioned", "code": "model_decommissioned"}}')
+    answer_in_turn(monkeypatch, urllib.error.HTTPError(f"{API_URL}/chat/completions", 400, "error", {}, body), api_error(404))
+
+    for _ in range(2):
+        with pytest.raises(LLMError) as error:
+            model.generate(MESSAGES)
+        assert "retiré ou inconnu" in str(error.value) and "preview" in str(error.value)
+        assert "--backend ollama" in str(error.value) and FAKE_KEY not in str(error.value)
+
+
+def test_quota_and_missing_key_errors_say_how_to_go_back_to_local_mode(monkeypatch, api_model):
+    model, _ = api_model
+    answer_in_turn(monkeypatch, api_error(429, retry_after="3600"))
+    with pytest.raises(LLMError, match="Quota de l'API atteint pour aujourd'hui") as error:
+        model.generate(MESSAGES)
+    assert "--backend ollama" in str(error.value)
+
+    monkeypatch.delenv(KEY_ENV, raising=False)
+    with pytest.raises(LLMError, match="Clé absente") as error:
+        OpenAICompatibleChatModel(API_URL, "big-model", KEY_ENV).generate(MESSAGES)
+    assert "--backend ollama" in str(error.value) and FAKE_KEY not in str(error.value)
+
+
+def test_default_reasoning_effort_is_none_for_qwen3_only(monkeypatch):
+    monkeypatch.setenv(KEY_ENV, FAKE_KEY)
+    base = Settings(ollama_base_url=BASE_URL, llm_model="qwen/qwen3.8-27b", embedding_model="bge-m3", llm_backend="openai",
+                    llm_api_base_url=API_URL, llm_api_key_env=KEY_ENV)
+
+    assert make_chat_model(base).reasoning_effort == "none"
+    assert make_chat_model(dataclasses.replace(base, llm_api_reasoning_effort="low")).reasoning_effort == "low"
+    assert make_chat_model(dataclasses.replace(base, llm_model="openai/gpt-oss-120b")).reasoning_effort == ""
+
+
 def test_error_sent_in_the_middle_of_the_stream(monkeypatch):
     monkeypatch.setattr(
         llm.urllib.request,

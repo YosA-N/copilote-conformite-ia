@@ -22,6 +22,8 @@ from compliance_copilot.config import LLM_BACKENDS, Settings
 
 OUT_OF_MEMORY = re.compile(r"out of memory|unable to allocate|cudamalloc|more system memory", re.IGNORECASE)
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}  # rate limit or a passing server error: wait, then try again
+LOCAL_MODE = "--backend ollama (ou LLM_BACKEND=ollama dans .env)"  # what to do when the remote API fails
+RETIRED_MODEL = re.compile(r"decommissioned|not found|does not exist|no longer supported|model_not_found", re.IGNORECASE)
 USER_AGENT = "compliance-copilot/0.1"  # the default Python user agent is refused by the API's front (Cloudflare error 1010, HTTP 403)
 
 
@@ -188,9 +190,11 @@ class OpenAICompatibleChatModel:
 
     def _explain(self, status: int, detail: str) -> str:
         if status in (401, 403):
-            return f"Clé refusée par l'API (HTTP {status}) : vérifiez {self.api_key_env} dans le fichier .env."
-        if status == 404:
-            return f"Modèle {self.model} inconnu de l'API {self.base_url} (HTTP 404) : vérifiez LLM_MODEL."
+            return (f"Clé refusée par l'API (HTTP {status}) : vérifiez {self.api_key_env} dans le fichier .env, "
+                    f"ou revenez au mode local avec {LOCAL_MODE}.")
+        if status == 404 or (status == 400 and RETIRED_MODEL.search(detail)):
+            return (f"Modèle {self.model} retiré ou inconnu de l'API {self.base_url} (HTTP {status}) : les modèles en preview "
+                    f"peuvent disparaître. Choisissez un autre modèle avec --model (ou LLM_MODEL), ou revenez au mode local avec {LOCAL_MODE}.")
         return self._hide_key(f"L'API {self.base_url} a renvoyé une erreur (HTTP {status}) : {detail}")
 
     def _wait_seconds(self, retry_after: str | None, attempt: int) -> float:
@@ -201,7 +205,8 @@ class OpenAICompatibleChatModel:
 
     def _require_key(self) -> None:
         if not self._api_key:
-            raise LLMError(f"Clé absente : ajoutez {self.api_key_env}=… dans le fichier .env (jamais dans le code ni dans Git).")
+            raise LLMError(f"Clé absente : ajoutez {self.api_key_env}=… dans le fichier .env (jamais dans le code ni dans Git), "
+                           f"ou revenez au mode local avec {LOCAL_MODE}.")
 
     def _headers(self) -> dict[str, str]:
         return {"Content-Type": "application/json", "Authorization": f"Bearer {self._api_key}", "User-Agent": USER_AGENT}
@@ -250,8 +255,8 @@ class OpenAICompatibleChatModel:
                 wait = self._wait_seconds(error.headers.get("retry-after"), attempt)
                 if wait > self.max_wait:
                     raise LLMError(
-                        f"Quota de l'API atteint : il faudrait attendre {wait / 60:.0f} min (limite par jour probable). "
-                        "Relancez plus tard."
+                        f"Quota de l'API atteint pour aujourd'hui : il faudrait attendre {wait / 60:.0f} min. "
+                        f"Revenez au mode local avec {LOCAL_MODE}, ou relancez plus tard."
                     ) from None
                 reason = "limite de débit atteinte" if error.code == 429 else f"erreur passagère du serveur (HTTP {error.code})"
                 print(f"[API] {reason}, attente de {wait:.0f} s (essai {attempt}/{self.max_attempts})", file=sys.stderr, flush=True)
@@ -280,11 +285,18 @@ class OpenAICompatibleChatModel:
         )
 
 
+def default_reasoning_effort(model: str) -> str:
+    """When LLM_API_REASONING_EFFORT is empty: no reasoning for the retained remote model (qwen3.8-27b writes
+    better without it in our tests, and reasoning tokens would count in the answer limit); nothing sent otherwise."""
+    return "none" if model.startswith("qwen/qwen3") else ""
+
+
 def make_chat_model(settings: Settings) -> OllamaChatModel | OpenAICompatibleChatModel:
     """The language model configured in .env: local Ollama by default."""
     if settings.llm_backend not in LLM_BACKENDS:
         raise LLMError(f"LLM_BACKEND doit valoir {' ou '.join(LLM_BACKENDS)} (reçu : {settings.llm_backend}).")
     if settings.llm_backend == "openai":
+        effort = settings.llm_api_reasoning_effort or default_reasoning_effort(settings.llm_model)
         return OpenAICompatibleChatModel(
             settings.llm_api_base_url,
             settings.llm_model,
@@ -292,7 +304,7 @@ def make_chat_model(settings: Settings) -> OllamaChatModel | OpenAICompatibleCha
             num_ctx=settings.llm_num_ctx,
             temperature=settings.llm_temperature,
             max_tokens=settings.llm_max_tokens,
-            reasoning_effort=settings.llm_api_reasoning_effort,
+            reasoning_effort=effort,
         )
     return OllamaChatModel(
         settings.ollama_base_url,
