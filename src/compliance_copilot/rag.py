@@ -244,12 +244,19 @@ def check_citations(text: str, passage_count: int) -> CitationCheck:
 # ---------------------------------------------------------------- verified extracts
 
 
+TYPOGRAPHIC = str.maketrans(
+    {"\u2019": "'", "\u2018": "'", "\u00ab": None, "\u00bb": None, '"': None, "\u201c": None, "\u201d": None, "\u00ad": None,
+     "\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2013": "-"}
+)  # apostrophes made plain, quotes dropped, soft hyphen dropped, hyphen variants (non-breaking…) made plain
+SPACE_BEFORE_PUNCTUATION = re.compile(r"\s+(?=[:;!?,.])")  # « nécessaire : a) » written by a model, « nécessaire: a) » in the text
+
+
 def _comparable(text: str) -> str:
-    """Ignore only what does not change the words: spaces, apostrophe and quote styles, case."""
-    text = unicodedata.normalize("NFC", text).replace("­", "")
-    for variant, plain in (("’", "'"), ("‘", "'"), ("«", '"'), ("»", '"'), ("“", '"'), ("”", '"')):
-        text = text.replace(variant, plain)
-    return re.sub(r"\s+", " ", text).strip().casefold()
+    """Ignore only what does not change the words: spaces (also before : ; ! ?), apostrophe, quote and hyphen
+    styles, case. Applied to both sides, the extract and the passage: plain character replacements, nothing fuzzy."""
+    text = unicodedata.normalize("NFC", text).translate(TYPOGRAPHIC)
+    text = SPACE_BEFORE_PUNCTUATION.sub("", re.sub(r"\s+", " ", text))
+    return text.strip().casefold()
 
 
 def found_word_for_word(extract: str, passage_text: str, min_words: int = MIN_EXTRACT_WORDS) -> bool:
@@ -290,6 +297,7 @@ def parse_extracts(extracts_part: str) -> list[tuple[int | None, str]]:
     for item in items:
         number, text = ITEM.match(item).groups()
         text = re.sub(r"^[«\"“]\s*", "", text.strip(" *_"))  # also drop Markdown emphasis: *« … »*
+        text = re.sub(r"([»\"”])\s*[*_]*\[\d+[a-z]?\][*_]*\s*$", r"\1", text)  # citation repeated after the quote: « … »**[2]**
         text = re.sub(r"\s*[»\"”]\s*[.;,]?\s*$", "", text.strip(" *_")).strip(" *_")
         if text and text.casefold() not in {"aucun", "aucune", "aucun extrait"}:
             parsed.append((int(number) if number else None, text))
