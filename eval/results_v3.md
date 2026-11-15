@@ -112,3 +112,33 @@ Par question (valeurs dans l'ordre `v4` · `qwen27b` · `gptoss`) :
 - `qwen/qwen3.8-27b` est un modèle en preview : les réponses datent du 15/11/2026 et pourraient ne pas être reproductibles plus tard.
 - La vérification mot pour mot pénalise `gptoss` pour des caractères typographiques, pas pour le sens : à trancher avant toute conclusion sur ce modèle.
 - Une seule passe par modèle (température 0,1) : la stabilité n'a pas été mesurée.
+
+## 6. Relecture humaine (grille `eval/rubric.md`)
+
+Verdicts de l'auteur, enregistrés tels quels dans `eval/reviews/v4_big_qwen27b.jsonl`, `heldout_v4_big_qwen27b.jsonl`, `v4_big_gptoss.jsonl` et `heldout_v4_big_gptoss.jsonl` (`scripts/review_summary.py --check` : 11 relectures cohérentes avec les réponses et les questions).
+
+| Série | Questions | Juste | Partiel | Faux | Dangereux |
+|---|---|---|---|---|---|
+| v4 local, v0 (`v4`) | 12 | 8 | 2 | 0 | 2 |
+| v4 local, v1 (`heldout_v4`) | 20 | 9 | 3 | 4 | 4 |
+| **v4 local, total** | 32 | 17 | 5 | 4 | **6** |
+| qwen3.8-27b, v0 (`v4_big_qwen27b`) | 12 | 12 | 0 | 0 | 0 |
+| qwen3.8-27b, v1 (`heldout_v4_big_qwen27b`) | 20 | 13 | 5 | 2 | 0 |
+| **qwen3.8-27b, total** | 32 | 25 | 5 | 2 | **0** |
+| gpt-oss-120b, v0 (`v4_big_gptoss`) | 12 | 10 | 1 | 1 | 0 |
+| gpt-oss-120b, v1 (`heldout_v4_big_gptoss`) | 20 | 8 | 2 | 7 | 3 |
+| **gpt-oss-120b, total** | 32 | 18 | 3 | 8 | **3** |
+
+Questions qui ne sont pas justes :
+- qwen3.8-27b : partiel q12, q16, q22, q23, q27 · faux q18, q24.
+- gpt-oss-120b : partiel q06, q14, q23 · faux q10, q11, q12, q15, q18, q22, q24, q25 · dangereux q16, q26, q27.
+
+**Conclusion.** La taille du modèle aide beaucoup : avec les mêmes passages, le même prompt et les mêmes contrôles, `qwen3.8-27b` ne produit aucune réponse dangereuse, contre 6 pour le modèle local, et 25 réponses justes contre 17. Mais elle ne suffit pas : `gpt-oss-120b`, plus gros encore, produit 3 réponses dangereuses (q16, q26, q27) et 8 fausses, dont 3 refus dus à la vérification mot pour mot et 4 abstentions du juge.
+
+**Trois problèmes de méthode, communs à tous les modèles**, à traiter chacun dans une PR séparée (rien n'est corrigé dans celle-ci) :
+
+a) **La vérification mot pour mot échoue sur les caractères typographiques** (apostrophe ’, trait d'union insécable ‑, espaces insécables) : trois réponses de `gpt-oss-120b` (q11, q12, q15) sont remplacées par un refus alors que l'article répond.
+
+b) **q24 donne une abstention avec les trois modèles** : le problème est dans la recherche des passages (l'art. 5, § 1, f n'est pas dans les 5 passages avec le lexique neutre) ou dans le juge, pas dans le modèle qui rédige.
+
+c) **L'adéquation des États-Unis dépend d'un texte absent du corpus** (décision d'exécution (UE) 2023/1795, Data Privacy Framework) : `qwen3.8-27b` reste partiel sur q16 faute de pouvoir le dire, et `gpt-oss-120b` affirme le contraire (dangereux).
