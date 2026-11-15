@@ -22,6 +22,7 @@ from compliance_copilot.config import LLM_BACKENDS, Settings
 
 OUT_OF_MEMORY = re.compile(r"out of memory|unable to allocate|cudamalloc|more system memory", re.IGNORECASE)
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}  # rate limit or a passing server error: wait, then try again
+USER_AGENT = "compliance-copilot/0.1"  # the default Python user agent is refused by the API's front (Cloudflare error 1010, HTTP 403)
 
 
 @dataclass
@@ -203,7 +204,7 @@ class OpenAICompatibleChatModel:
             raise LLMError(f"Clé absente : ajoutez {self.api_key_env}=… dans le fichier .env (jamais dans le code ni dans Git).")
 
     def _headers(self) -> dict[str, str]:
-        return {"Content-Type": "application/json", "Authorization": f"Bearer {self._api_key}"}
+        return {"Content-Type": "application/json", "Authorization": f"Bearer {self._api_key}", "User-Agent": USER_AGENT}
 
     def list_models(self) -> list[str]:
         """The ids of the models the key may use (GET /models): nothing is sent but the key."""

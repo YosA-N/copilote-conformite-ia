@@ -169,6 +169,7 @@ def test_api_answer_is_read_with_its_statistics_and_rate_limits(monkeypatch, api
     assert body == {"model": "big-model", "messages": MESSAGES, "temperature": 0.1, "max_completion_tokens": 2000, "stream": False}
     assert requests[0].full_url == f"{API_URL}/chat/completions"
     assert requests[0].get_header("Authorization") == f"Bearer {FAKE_KEY}"
+    assert requests[0].get_header("User-agent") == llm.USER_AGENT  # Python's default user agent gets a 403 from the API's front
 
 
 def test_api_answer_stopped_by_the_length_limit_is_marked_as_truncated(monkeypatch, api_model):
