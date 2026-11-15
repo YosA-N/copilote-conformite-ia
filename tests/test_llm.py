@@ -166,7 +166,7 @@ def test_api_answer_is_read_with_its_statistics_and_rate_limits(monkeypatch, api
     assert generation.truncated is False
     assert model.rate_limits == {"x-ratelimit-limit-tokens": "12000"}
     body = json.loads(requests[0].data)
-    assert body == {"model": "big-model", "messages": MESSAGES, "temperature": 0.1, "max_tokens": 2000, "stream": False}
+    assert body == {"model": "big-model", "messages": MESSAGES, "temperature": 0.1, "max_completion_tokens": 2000, "stream": False}
     assert requests[0].full_url == f"{API_URL}/chat/completions"
     assert requests[0].get_header("Authorization") == f"Bearer {FAKE_KEY}"
 
@@ -226,8 +226,54 @@ def test_backend_is_chosen_in_the_settings(monkeypatch):
     assert isinstance(make_chat_model(local), OllamaChatModel)  # local by default
     remote = make_chat_model(api)
     assert isinstance(remote, OpenAICompatibleChatModel) and remote.num_ctx == local.llm_num_ctx
+    assert remote.reasoning_effort == ""
+    assert make_chat_model(dataclasses.replace(api, llm_api_reasoning_effort="none")).reasoning_effort == "none"
     with pytest.raises(LLMError, match="LLM_BACKEND"):
         make_chat_model(dataclasses.replace(local, llm_backend="cloud"))
+
+
+def test_reasoning_effort_is_sent_only_when_set(monkeypatch):
+    monkeypatch.setenv(KEY_ENV, FAKE_KEY)
+    requests = answer_in_turn(monkeypatch, FakeAPIResponse(api_answer()), FakeAPIResponse(api_answer()))
+
+    OpenAICompatibleChatModel(API_URL, "big-model", KEY_ENV).generate(MESSAGES)
+    OpenAICompatibleChatModel(API_URL, "big-model", KEY_ENV, reasoning_effort="low").generate(MESSAGES)
+
+    assert "reasoning_effort" not in json.loads(requests[0].data)
+    assert json.loads(requests[1].data)["reasoning_effort"] == "low"
+
+
+def test_reasoning_of_the_model_is_kept_apart_from_its_answer(monkeypatch, api_model):
+    model, _ = api_model
+    answer = api_answer()
+    answer["choices"][0]["message"]["reasoning"] = "Je réfléchis d'abord."
+    answer["usage"]["queue_time"] = 0.01
+    answer_in_turn(monkeypatch, FakeAPIResponse(answer))
+
+    generation = model.generate(MESSAGES)
+
+    assert generation.text == "Bonjour [1]" and generation.reasoning == "Je réfléchis d'abord."
+    assert model.last_usage["queue_time"] == 0.01
+
+
+def test_models_open_to_the_key_are_listed(monkeypatch, api_model):
+    model, _ = api_model
+    requests = answer_in_turn(
+        monkeypatch, FakeAPIResponse({"object": "list", "data": [{"id": "qwen/qwen3.8-27b"}, {"id": "openai/gpt-oss-120b"}]})
+    )
+
+    assert model.list_models() == ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
+    assert requests[0].full_url == f"{API_URL}/models" and requests[0].data is None
+    assert requests[0].get_header("Authorization") == f"Bearer {FAKE_KEY}"
+
+
+def test_models_list_errors_are_explained_without_the_key(monkeypatch, api_model):
+    model, _ = api_model
+    answer_in_turn(monkeypatch, api_error(401))
+
+    with pytest.raises(LLMError) as error:
+        model.list_models()
+    assert KEY_ENV in str(error.value) and FAKE_KEY not in str(error.value)
 
 
 def test_error_sent_in_the_middle_of_the_stream(monkeypatch):

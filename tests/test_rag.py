@@ -1,5 +1,7 @@
 """Offline tests for the answer pipeline, with the fake embedding model and the fake language model."""
 
+import dataclasses
+
 import pytest
 from conftest import FakeChatModel
 
@@ -647,6 +649,20 @@ def test_truncated_answer_is_reported(passages):
 
     assert any("Réponse coupée" in warning and "700" in warning for warning in answer.warnings)
     assert "Attention : Réponse coupée" in render_footer(answer)
+
+
+class ReasoningChatModel(FakeChatModel):
+    """Like an API model that reasons before answering: the reasoning comes back apart from the text."""
+
+    def generate(self, messages, on_text=None) -> Generation:
+        return dataclasses.replace(super().generate(messages, on_text), reasoning="je pèse chaque mot " * 25)
+
+
+def test_truncation_by_the_reasoning_is_reported_with_its_size(passages):
+    answer = answer_from_passages(QUESTION, passages, ReasoningChatModel(reply=GOOD_REPLY, truncated=True))
+
+    warning = next(w for w in answer.warnings if "Réponse coupée" in w)
+    assert "raisonnement" in warning and "environ 100 mots" in warning
 
 
 def test_passages_that_do_not_fit_in_the_context_are_dropped(index_dir, fake_embedder):

@@ -14,7 +14,6 @@ Usage, from the repository root:
 
 import argparse
 import json
-import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -22,18 +21,13 @@ from statistics import median
 
 from compliance_copilot.config import EVAL_DIR, INDEX_DIR, PROCESSED_DIR, load_settings
 from compliance_copilot.embeddings import EmbeddingError, make_embedder
-from compliance_copilot.evaluation import article_level, load_questions, matches
+from compliance_copilot.evaluation import alert_kind, article_level, load_questions, matches
 from compliance_copilot.index import IndexNotReadyError, search
 from compliance_copilot.llm import LLMError, OllamaChatModel
 from compliance_copilot.rag import SYSTEM_PROMPT, answer_from_passages, fit_passages, uses_tu
 
 QUESTION_FILES = ["questions_v0.jsonl", "questions_offtopic_v0.jsonl", "questions_v1.jsonl"]
 OUTPUT = PROCESSED_DIR / "model_comparison.json"
-
-
-def alert_kind(warning: str) -> str:
-    """'La réponse ne reprend que 0 des 3 cas…' → 'La réponse ne reprend que N des N cas…': the alert without its details."""
-    return " ".join(re.sub(r"\d+", "N", warning).split()[:9]) + " …"
 
 
 def main() -> int:

@@ -636,9 +636,13 @@ def _warnings(found: int, passages: list[SearchResult], chat_model: ChatModel, g
             f"{found - len(passages)} passage(s) retiré(s) faute de place dans le contexte du modèle (LLM_NUM_CTX = {chat_model.num_ctx})."
         )
     if generation.truncated:
+        reasoning = (
+            f" Son raisonnement (environ {len(generation.reasoning.split())} mots, non affiché) a consommé une partie de cette limite."
+            if generation.reasoning else ""
+        )
         warnings.append(
             f"Réponse coupée : le modèle a atteint la limite de {chat_model.max_tokens} tokens (LLM_MAX_TOKENS), "
-            "la fin de la réponse manque. Posez une question plus précise ou augmentez LLM_MAX_TOKENS dans .env."
+            f"la fin de la réponse manque.{reasoning} Posez une question plus précise ou augmentez LLM_MAX_TOKENS dans .env."
         )
     rejected = [extract for extract in extracts if not extract.verified]
     if refused:

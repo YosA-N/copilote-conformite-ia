@@ -32,6 +32,7 @@ class Generation:
     seconds: float  # whole call, model loading included
     tokens_per_second: float  # writing speed of the answer
     truncated: bool  # stopped by the max_tokens limit, so the end of the answer is missing
+    reasoning: str = ""  # reasoning written by an API model before its answer: hidden from the user, but counted in completion_tokens
 
 
 class ChatModel(Protocol):
@@ -144,6 +145,8 @@ class OpenAICompatibleChatModel:
     It is kept private: never in repr(), in an error message or in a file. Rate limits (HTTP 429) and
     passing server errors are waited for (retry-after header, else 2, 4, 8… s) and tried again; the
     time spent waiting is counted apart, in waited_seconds, so that it does not count as generation time.
+    With reasoning_effort set (none, low…), the value is sent as is; a reasoning text returned by the model goes
+    to Generation.reasoning, and its tokens count in completion_tokens and in the max_tokens limit.
     """
 
     def __init__(
@@ -154,6 +157,7 @@ class OpenAICompatibleChatModel:
         num_ctx: int = 8192,
         temperature: float = 0.1,
         max_tokens: int = 700,
+        reasoning_effort: str = "",
         timeout: float = 300,
         max_attempts: int = 8,
         max_wait: float = 300,
@@ -165,6 +169,7 @@ class OpenAICompatibleChatModel:
         self.num_ctx = num_ctx  # kept for fit_passages, so that the passages stay those of the local model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.reasoning_effort = reasoning_effort
         self.timeout = timeout
         self.max_attempts = max_attempts
         self.max_wait = max_wait  # a longer wait means the quota of the day is used up: stop instead
@@ -172,6 +177,7 @@ class OpenAICompatibleChatModel:
         self._api_key = os.environ.get(api_key_env, "").strip()
         self.waited_seconds = 0.0
         self.rate_limits: dict[str, str] = {}  # x-ratelimit-* headers of the last answer (they hold no secret)
+        self.last_usage: dict = {}  # usage of the last answer: tokens and the server's own timings (no secret)
 
     def __repr__(self) -> str:
         return f"OpenAICompatibleChatModel(base_url={self.base_url!r}, model={self.model!r}, api_key_env={self.api_key_env!r})"
@@ -192,17 +198,41 @@ class OpenAICompatibleChatModel:
         except ValueError:
             return min(2.0**attempt, 60.0)
 
-    def generate(self, messages: list[dict], on_text: Callable[[str], None] | None = None) -> Generation:
+    def _require_key(self) -> None:
         if not self._api_key:
             raise LLMError(f"Clé absente : ajoutez {self.api_key_env}=… dans le fichier .env (jamais dans le code ni dans Git).")
-        body = json.dumps(
-            {"model": self.model, "messages": messages, "temperature": self.temperature, "max_tokens": self.max_tokens, "stream": False}
-        ).encode("utf-8")
+
+    def _headers(self) -> dict[str, str]:
+        return {"Content-Type": "application/json", "Authorization": f"Bearer {self._api_key}"}
+
+    def list_models(self) -> list[str]:
+        """The ids of the models the key may use (GET /models): nothing is sent but the key."""
+        self._require_key()
+        request = urllib.request.Request(f"{self.base_url}/models", headers=self._headers())
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                data = json.load(response)
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace")[:300]
+            if error.code == 404:
+                raise LLMError(f"L'adresse {self.base_url}/models n'existe pas (HTTP 404) : vérifiez LLM_API_BASE_URL.") from None
+            raise LLMError(self._explain(error.code, detail)) from None
+        except (urllib.error.URLError, TimeoutError) as error:
+            raise LLMError(self._hide_key(f"L'API {self.base_url} ne répond pas ({error}). Vérifiez la connexion.")) from None
+        return sorted(model["id"] for model in data.get("data", []) if isinstance(model, dict) and "id" in model)
+
+    def generate(self, messages: list[dict], on_text: Callable[[str], None] | None = None) -> Generation:
+        self._require_key()
+        payload = {"model": self.model, "messages": messages, "temperature": self.temperature,
+                   "max_completion_tokens": self.max_tokens, "stream": False}  # max_tokens is deprecated by the API
+        if self.reasoning_effort:
+            payload["reasoning_effort"] = self.reasoning_effort
+        body = json.dumps(payload).encode("utf-8")
         for attempt in range(1, self.max_attempts + 1):
             request = urllib.request.Request(
                 f"{self.base_url}/chat/completions",
                 data=body,
-                headers={"Content-Type": "application/json", "Authorization": f"Bearer {self._api_key}"},
+                headers=self._headers(),
             )
             start = time.perf_counter()
             try:
@@ -229,10 +259,12 @@ class OpenAICompatibleChatModel:
                 raise LLMError(self._hide_key(f"L'API {self.base_url} ne répond pas ({error}). Vérifiez la connexion.")) from None
 
         choice = data["choices"][0]
-        text = choice.get("message", {}).get("content") or ""
+        message = choice.get("message", {})
+        text = message.get("content") or ""
         if on_text and text:
             on_text(text)
         usage = data.get("usage", {})
+        self.last_usage = usage
         completion_tokens = usage.get("completion_tokens", 0)
         writing_seconds = usage.get("completion_time") or seconds  # Groq gives the writing time itself
         return Generation(
@@ -242,6 +274,7 @@ class OpenAICompatibleChatModel:
             seconds=seconds,
             tokens_per_second=completion_tokens / writing_seconds if writing_seconds else 0.0,
             truncated=choice.get("finish_reason") == "length",
+            reasoning=message.get("reasoning") or message.get("reasoning_content") or "",
         )
 
 
@@ -257,6 +290,7 @@ def make_chat_model(settings: Settings) -> OllamaChatModel | OpenAICompatibleCha
             num_ctx=settings.llm_num_ctx,
             temperature=settings.llm_temperature,
             max_tokens=settings.llm_max_tokens,
+            reasoning_effort=settings.llm_api_reasoning_effort,
         )
     return OllamaChatModel(
         settings.ollama_base_url,

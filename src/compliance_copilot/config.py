@@ -40,6 +40,7 @@ class Settings:
     llm_backend: str = "ollama"  # "ollama" (local, the default) or "openai" (an OpenAI-compatible API, session 7 experiment)
     llm_api_base_url: str = DEFAULT_API_BASE_URL
     llm_api_key_env: str = DEFAULT_API_KEY_ENV  # name of the environment variable that holds the API key
+    llm_api_reasoning_effort: str = ""  # reasoning_effort sent to the API when set (none, low…, depends on the model); empty = not sent
 
 
 def optional_int(value: str | None) -> int | None:
@@ -69,4 +70,5 @@ def load_settings() -> Settings:
         llm_backend=os.getenv("LLM_BACKEND", "ollama").strip().lower(),
         llm_api_base_url=os.getenv("LLM_API_BASE_URL", DEFAULT_API_BASE_URL).rstrip("/"),
         llm_api_key_env=os.getenv("LLM_API_KEY_ENV", DEFAULT_API_KEY_ENV).strip(),
+        llm_api_reasoning_effort=os.getenv("LLM_API_REASONING_EFFORT", "").strip().lower(),
     )
