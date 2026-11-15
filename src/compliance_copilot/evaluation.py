@@ -71,6 +71,11 @@ def verdict_counts(reviews: list[Review]) -> dict[str, int]:
     return {verdict: sum(1 for review in reviews if review.verdict == verdict) for verdict in VERDICTS}
 
 
+def alert_kind(warning: str) -> str:
+    """'La réponse ne reprend que 0 des 3 cas…' → 'La réponse ne reprend que N des N cas …': the alert without its details."""
+    return " ".join(re.sub(r"\d+", "N", warning).split()[:9]) + " …"
+
+
 def answered_question_ids(answers_path: Path) -> list[str]:
     """Ids of the questions answered in an eval/answers_<version>.md file, in order."""
     return ANSWER_TITLE.findall(answers_path.read_text(encoding="utf-8"))

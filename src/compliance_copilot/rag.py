@@ -166,6 +166,7 @@ class RagAnswer:
     abstained: bool = False  # the judge found that the extracts do not answer the question directly
     judgment: bool | None = None  # OUI → True, NON → False, unclear or not asked → None
     judge_seconds: float = 0.0
+    wait_seconds: float = 0.0  # time spent waiting for the rate limits of an API, not counted in the times above
 
     @property
     def verified_extracts(self) -> list[Extract]:
@@ -643,9 +644,13 @@ def _warnings(found: int, passages: list[SearchResult], chat_model: ChatModel, g
             f"{found - len(passages)} passage(s) retiré(s) faute de place dans le contexte du modèle (LLM_NUM_CTX = {chat_model.num_ctx})."
         )
     if generation.truncated:
+        reasoning = (
+            f" Son raisonnement (environ {len(generation.reasoning.split())} mots, non affiché) a consommé une partie de cette limite."
+            if generation.reasoning else ""
+        )
         warnings.append(
             f"Réponse coupée : le modèle a atteint la limite de {chat_model.max_tokens} tokens (LLM_MAX_TOKENS), "
-            "la fin de la réponse manque. Posez une question plus précise ou augmentez LLM_MAX_TOKENS dans .env."
+            f"la fin de la réponse manque.{reasoning} Posez une question plus précise ou augmentez LLM_MAX_TOKENS dans .env."
         )
     rejected = [extract for extract in extracts if not extract.verified]
     if refused:
@@ -774,9 +779,11 @@ def answer_from_passages(
     With judge=True, a second short call checks that the verified extracts answer the question directly;
     if not, the answer is replaced by ABSTENTION. Nothing is streamed then, since the verdict comes last."""
     stream = AnswerStream(on_text, passages) if on_text and not judge else None
+    waited_before = getattr(chat_model, "waited_seconds", 0.0)  # only an API backend waits for rate limits
     start = time.perf_counter()
     generation = chat_model.generate(build_messages(question, passages, system_prompt), on_text=stream.feed if stream else None)
-    generation_seconds = time.perf_counter() - start
+    generation_wait = getattr(chat_model, "waited_seconds", 0.0) - waited_before
+    generation_seconds = time.perf_counter() - start - generation_wait
     if stream:
         stream.close()
 
@@ -786,7 +793,7 @@ def answer_from_passages(
     if judge and not refused:
         start = time.perf_counter()
         judgment = judge_extracts(question, [extract.text for extract in extracts if extract.verified], chat_model)
-        judge_seconds = time.perf_counter() - start
+        judge_seconds = time.perf_counter() - start - (getattr(chat_model, "waited_seconds", 0.0) - waited_before - generation_wait)
     abstained = judgment is False
     if abstained:
         text = ABSTENTION
@@ -819,6 +826,7 @@ def answer_from_passages(
         abstained=abstained,
         judgment=judgment,
         judge_seconds=judge_seconds,
+        wait_seconds=getattr(chat_model, "waited_seconds", 0.0) - waited_before,
     )
 
 

@@ -159,6 +159,12 @@ L'auteur débute en programmation : Claude écrit le code, l'auteur valide. Tout
     - réponse coupée signalée (`done_reason = "length"`) ;
     - avertissement « Information, pas un conseil juridique ».
   - Réponses de référence non retouchées : `eval/answers_v0.md` (séance 4), `eval/answers_v1.md` (séance 5), `eval/answers_v2.md` (séance 5 bis) et `eval/answers_v3.md` (séance 5 ter, relue : `eval/reviews/v3.jsonl`), produites par `answer_questions.py --version …` (10 questions et 2 hors sujet).
+- **Séance 7, expérience « un modèle plus gros rédige-t-il mieux ? »** (`eval/results_v3.md`) : seul le modèle qui rédige et juge change, par l'API compatible OpenAI du niveau gratuit de Groq (`LLM_BACKEND=openai`, backend `OpenAICompatibleChatModel` dans `llm.py`, `urllib` seulement). **Le copilote reste local par défaut** ; l'API n'a reçu que les questions de test, sans donnée personnelle.
+  - `llama-3.3-70b-versatile`, prévu au départ, a été retiré par Groq le 16/08/2026. Essayés le 15/11/2026 : `qwen/qwen3.8-27b` (27 Md, dense, preview, `reasoning_effort=none`) puis `openai/gpt-oss-120b` (120 Md, MoE à 5,1 Md actifs, production, `reasoning_effort=low`, raisonnement compté dans les 2 000 tokens et renvoyé dans le fichier).
+  - Limites réelles du compte (en-têtes `x-ratelimit-*`) : 1 000 requêtes/jour, 8 000 tokens/min, 200 000 tokens/jour d'après la page Groq ; 32 questions ≈ 150 000 tokens, une passe par jour et par modèle ; environ 25 s d'attente par question, comptée à part (`wait_seconds`). Conservation des données : rien par défaut, journaux d'abus 30 jours désactivables, Zero Data Retention activée par l'auteur.
+  - Sécurité de la clé : `GROQ_API_KEY` dans `.env` seulement (`LLM_API_KEY_ENV` donne le nom de la variable), jamais affichée ; `scripts/scan_secrets.py` lancé par un crochet pre-commit local (`.git/hooks`, non versionné). L'API refuse l'agent HTTP par défaut de Python (403 Cloudflare) : le client se nomme `compliance-copilot/0.1`.
+  - Réponses, sans retouche : `eval/answers_v4_big_qwen27b.md`, `answers_heldout_v4_big_qwen27b.md`, `answers_v4_big_gptoss.md`, `answers_heldout_v4_big_gptoss.md`. Mesures du code (pas un verdict) sur 32 questions : qwen27b 26 réponses sur 27, 137/139 extraits vérifiés, 8 réponses avec alerte, 1 abstention ; gpt-oss 20 sur 27, 59/78 extraits, 20 avec alerte, 4 abstentions et 3 refus (q11, q12, q15 : aucun extrait vérifié, en partie à cause de traits d'union U+2011 et d'espaces fines U+202F que le modèle ajoute) ; v4 locale 25 sur 27, 76/83, 14 avec alerte. Génération par l'API 1 à 5 s au lieu de 18 à 77 s. **Verdicts à venir de la relecture de l'auteur.**
+  - Outils ajoutés : `scripts/check_api.py` (appel d'essai, modèles ouverts à la clé, limites), `scripts/compare_answers.py` (compare des séries de fichiers `answers_*.md`), `answer_questions.py --backend --model --reasoning-effort --resume` (fichier réécrit après chaque réponse, reprise après un arrêt par quota).
 - **Interface web** : Streamlit, plus tard.
 - **Dépendances** : on n'ajoute une bibliothèque qu'à l'étape qui en a besoin, avec une version épinglée (`==`) dans `requirements.txt`.
 
@@ -200,6 +206,9 @@ copy .env.example .env                                 # créer sa configuration
 .venv\Scripts\python scripts\answer_questions.py --version v3   # écrire eval/answers_v3.md (12 questions)
 .venv\Scripts\python scripts\answer_questions.py --questions eval\questions_v1.jsonl --version heldout_v3   # poser un autre fichier de questions
 .venv\Scripts\python scripts\review_summary.py --check        # tableau des verdicts des relectures (eval\reviews\*.jsonl)
+.venv\Scripts\python scripts\check_api.py --model qwen/qwen3.8-27b --reasoning-effort none   # séance 7 : un appel d'essai à l'API, limites du compte
+.venv\Scripts\python scripts\answer_questions.py --backend openai --model qwen/qwen3.8-27b --reasoning-effort none --version v4_big_qwen27b   # réponses par l'API (--resume pour reprendre)
+.venv\Scripts\python scripts\compare_answers.py v4=eval\answers_v4.md,eval\answers_heldout_v4.md qwen27b=eval\answers_v4_big_qwen27b.md,eval\answers_heldout_v4_big_qwen27b.md   # comparer des séries de réponses
 .venv\Scripts\python scripts\compare_retrieval.py --repeat 3    # comparer les configurations de recherche (v0 et v1)
 .venv\Scripts\python scripts\compare_models.py ministral-3:3b qwen3:4b-instruct   # comparer les modèles sur les mêmes passages (option --prompt-file : comparer un autre prompt)
 .venv\Scripts\python -m pytest                         # lancer les tests
