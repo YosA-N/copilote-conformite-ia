@@ -1,4 +1,4 @@
-# Séance 8 — q24 : abstention avec les trois modèles, recherche ou juge ?
+# Séance 7 bis — q24 : abstention avec les trois modèles, recherche ou juge ?
 
 Question q24 de `eval/questions_v1.jsonl` : « Ai-je le droit d'utiliser une IA qui analyse les émotions de mes salariés ? ». Article attendu : AI Act, art. 5, § 1, f) (interdit sur le lieu de travail, sauf raisons médicales ou de sécurité ; morceau `ai_act:art_5:par_1_f-h`).
 
@@ -131,7 +131,7 @@ Puis q24 rejouée de bout en bout (chaîne complète) en local et en mode distan
 
 **Hors plan** : pas de retour à l'entrée « pratiques interdites » liée aux émotions (elle contient la réponse) ; pas de changement du découpage (hypothèse réfutée) ; `questions_v2.jsonl` et les questions de l'auteur ne sont ni lues ni utilisées.
 
-## 6. Étape 1, validée par l'auteur : entrée de lexique sur la forme de la question
+## 6. Étape 1 : entrée de lexique sur la forme de la question — **mesurée, non retenue**
 
 Deux entrées candidates, ajoutées au lexique en mémoire seulement (aucun code changé pendant la mesure), `compare_retrieval.py --repeat 3`, 16/11/2026, sur secteur, 3 mesures identiques à chaque fois. Les deux ajoutent « pratique interdite ou autorisée » ; elles ne nomment ni les émotions ni une conclusion.
 
@@ -141,11 +141,11 @@ Deux entrées candidates, ajoutées au lexique en mémoire seulement (aucun code
 | **étroite** : `ai-je le droit \| a-t-on le droit \| avons-nous le droit \| est-(ce\|il) (permis\|autorisé\|interdit\|légal)` | 7/10, **10/10** | **14/17, 17/17** | **16/17** | **1 (§ 2)** | 3 |
 | large : étroite + `(puis-je \| peut-on \| pouvons-nous \| peut-il/elle) utiliser` | 7/10, **9/10** | 14/17, 17/17 | 16/17 | 1 (§ 2) | **7** |
 
-- **Entrée étroite retenue** : aucun recul, trois mesures montent. Dans v0 et v1, seule q24 la déclenche : aucune autre ligne du tableau des rangs ne change. q24 : l'art. 5, § 1, a-e passe au rang 1 et le morceau f-h (points f à h, celui qui répond) au rang 2 ; les deux entrent dans les passages (limite de 2 par article).
+- **Entrée étroite** (gardée un temps, puis retirée : voir 6.1) : aucun recul de la recherche, trois mesures montent. Dans v0 et v1, seule q24 la déclenche : aucune autre ligne du tableau des rangs ne change. q24 : l'art. 5, § 1, a-e passe au rang 1 et le morceau f-h (points f à h, celui qui répond) au rang 2 ; les deux entrent dans les passages (limite de 2 par article).
 - **Entrée large rejetée** par la règle de décision : « Puis-je utiliser une IA pour trier des CV ? » (q09) recule du rang 3 au rang 7, et v0 passe de 10 à 9/10 ; « interdite » fait entrer l'art. 5 et sortir l'art. 26 (obligations des déployeurs). La forme « puis-je » est trop générale : elle sert aussi à « combien de temps puis-je garder… » (q03).
 - Rappel de méthode (section 0) : cette entrée a été choisie en regardant q24, une question v1. Le 17/17 sur v1 est donc optimiste ; seule `questions_v2.jsonl` (+ questions de l'auteur) dira ce que vaut l'entrée sur des questions jamais vues.
 
-Code : une ligne dans `src/compliance_copilot/lexicon.py` ; test `test_lexicon_translates_the_form_of_a_permission_question_without_its_subject` dans `tests/test_lexical.py` (les formes retenues déclenchent l'entrée, « puis-je utiliser » et « puis-je garder » non).
+Code pendant la mesure : une ligne dans `src/compliance_copilot/lexicon.py` (commit `da3cd10`), retirée ensuite (section 6.1) ; `tests/test_lexical.py` vérifie désormais que « ai-je le droit » ne déclenche aucune entrée.
 
 ### 6.1 q24 rejouée de bout en bout avec l'entrée (recherche réelle, génération, juge), 2 essais par modèle
 
@@ -162,4 +162,12 @@ Passages trouvés (identiques aux 4 essais) : [1] art. 5, § 1, a-e · [2] art. 
 - En **mode local**, l'étape 1 remplace une abstention « sans danger » par une réponse **inversée**, donc « dangereux » selon la grille (on juge la réponse affichée, pas les alertes). Le modèle local a le bon passage sous les yeux ([2]), ne le recopie pas correctement (extrait attribué à [1], non vérifié) et conclut « Oui, vous pouvez ». C'est l'erreur de rédaction déjà vue à la séance 6 sur cette question (« pour des raisons autres que médicales »), quand l'ancienne entrée de lexique trouvait l'art. 5. Les trois alertes du code la signalent, comme prévu, mais ne la corrigent pas.
 - Le juge local dit OUI les deux fois, parce que les extraits vérifiés changent (art. 50, § 3 seul) : nouvelle illustration de son instabilité (section 2.3).
 
-**Décision de l'auteur (16/11/2026) : l'entrée est gardée.** Les termes du choix étaient : garder l'entrée (recherche meilleure sur v0 et v1, q24 juste en mode distant, le modèle retenu de la séance 7 ; en local, réponse fausse mais signalée) ou la retirer (abstention locale sans danger, art. 5 absent en distant aussi). L'étape 2 (juge local) ne changerait rien ici : le problème local est la rédaction, pas le juge. Une piste générale pour la suite, non mesurée : quand un extrait n'est pas retrouvé dans le passage cité mais l'est mot pour mot dans un autre passage du même article, le réattribuer avec une alerte, au lieu de l'ignorer.
+**Décision de l'auteur (16/11/2026), révisée le même jour : l'entrée est RETIRÉE. Statut : « mesurée, non retenue ».** Raisons :
+
+1. en mode local, qui est le mode par défaut, elle transforme une abstention sans danger en réponse inversée (« Oui, vous pouvez… »), donc dangereuse selon `eval/rubric.md` ; le critère principal du projet est zéro réponse dangereuse ;
+2. le gain mesuré vient d'une seule question (q24) : aucune autre question de v0 ou v1 ne déclenche l'entrée, donc rien ne prouve qu'elle aide en général ;
+3. elle risque d'envoyer vers l'art. 5 de l'AI Act des questions RGPD de forme « ai-je le droit de… », et aucune question de test ne permet de le contrôler.
+
+Règle de décision complétée par l'auteur : aucun recul du hit@5 sur v0 ni v1, **et aucune réponse dangereuse créée en mode local**. Le diagnostic (sections 1 à 4) et les mesures (section 6) restent tels quels.
+
+Les termes du choix initial étaient : garder l'entrée (recherche meilleure sur v0 et v1, q24 juste en mode distant, le modèle retenu de la séance 7 ; en local, réponse fausse mais signalée) ou la retirer (abstention locale sans danger, art. 5 absent en distant aussi). L'étape 2 (juge local) ne changerait rien ici : le problème local est la rédaction, pas le juge. Une piste générale pour la suite, non mesurée : quand un extrait n'est pas retrouvé dans le passage cité mais l'est mot pour mot dans un autre passage du même article, le réattribuer avec une alerte, au lieu de l'ignorer.

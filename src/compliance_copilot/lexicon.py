@@ -35,9 +35,8 @@ LEXICON: list[tuple[str, str]] = [
     # the lexicon translates words, it never gives the conclusion: emotion recognition is only forbidden at work and in education
     (r"emotion", "systèmes de reconnaissance des émotions"),
     (r"amendes?|sanctions?", "amendes administratives"),
-    # session 8 (eval/results_v4.md): the FORM of a permission question, both outcomes, no subject named.
-    # Narrow on purpose: « puis-je utiliser » was measured too and pushed AI Act art. 26 out of q09's passages.
-    (r"ai-je le droit|a-t-on le droit|avons-nous le droit|est-(ce|il) (permis|autorise|interdit|legal)", "pratique interdite ou autorisée"),
+    # Measured and NOT kept (session 7 bis, eval/results_v4.md, section 6): « ai-je le droit » → « pratique interdite
+    # ou autorisée ». It only helped q24 and, with the local model, turned a harmless abstention into an inverted answer.
 ]
 
 

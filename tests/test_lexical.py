@@ -42,11 +42,11 @@ def test_lexicon_adds_the_legal_wording_of_everyday_words():
     assert expand_query("Quel temps fait-il ?") == "Quel temps fait-il ?"
 
 
-def test_lexicon_translates_the_form_of_a_permission_question_without_its_subject():
-    for question in ("Ai-je le droit de filmer l'entrée ?", "A-t-on le droit de refuser ?", "Est-ce interdit en Europe ?", "Est-il légal de le garder ?"):
-        assert "pratique interdite ou autorisée" in expand_query(question)
-    for question in ("Puis-je utiliser une IA pour trier des CV ?", "Combien de temps puis-je garder les données ?"):
-        assert "pratique interdite ou autorisée" not in expand_query(question)  # measured: it would push art. 26 out for q09
+def test_lexicon_has_no_entry_on_the_form_of_a_permission_question():
+    """Decision of the author (session 7 bis, eval/results_v4.md): « ai-je le droit » → « pratique interdite ou autorisée »
+    was measured and not kept. The form of the question adds nothing; only its words can."""
+    assert expand_query("Ai-je le droit de filmer l'entrée ?") == "Ai-je le droit de filmer l'entrée ?"
+    assert "interdite" not in expand_query("Puis-je utiliser une IA pour trier des CV ?")
 
 
 def test_hybrid_search_returns_the_best_chunks_with_their_similarity(index_dir, fake_embedder):
