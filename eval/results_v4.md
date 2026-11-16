@@ -130,3 +130,36 @@ Puis q24 rejouée de bout en bout (chaîne complète) en local et en mode distan
 **Étape 2, juge local — séparée, à décider après l'étape 1.** Candidat : un juge **par extrait** (une question courte par extrait vérifié, OUI dès qu'un extrait répond), qui enlève l'effet de mélange. Coût : environ 2 s par extrait en local. À calibrer d'abord sur les 32 réponses relues de la séance 6 (`answers_v4.md`, `answers_heldout_v4.md`, extraits enregistrés, verdicts connus) : il faut garder 0 abstention sur les réponses justes et conserver les arrêts utiles (q15, q18, h05). Si cette calibration recule, le juge reste tel quel et la limite est documentée : en local, q24 restera une abstention « sans danger ».
 
 **Hors plan** : pas de retour à l'entrée « pratiques interdites » liée aux émotions (elle contient la réponse) ; pas de changement du découpage (hypothèse réfutée) ; `questions_v2.jsonl` et les questions de l'auteur ne sont ni lues ni utilisées.
+
+## 6. Étape 1, validée par l'auteur : entrée de lexique sur la forme de la question
+
+Deux entrées candidates, ajoutées au lexique en mémoire seulement (aucun code changé pendant la mesure), `compare_retrieval.py --repeat 3`, 16/11/2026, sur secteur, 3 mesures identiques à chaque fois. Les deux ajoutent « pratique interdite ou autorisée » ; elles ne nomment ni les émotions ni une conclusion.
+
+| Entrée (motif, accents ignorés) | v0 hit@1 / hit@5 | v1 hit@1 / hit@5 article | v1 hit@5 paragraphe | q24 (article, § f-h) | q09 |
+|---|---|---|---|---|---|
+| référence (`main`, sans entrée) | 7/10, 10/10 | 13/17, 16/17 | 15/17 | 11 (§ 11) | 3 |
+| **étroite** : `ai-je le droit \| a-t-on le droit \| avons-nous le droit \| est-(ce\|il) (permis\|autorisé\|interdit\|légal)` | 7/10, **10/10** | **14/17, 17/17** | **16/17** | **1 (§ 2)** | 3 |
+| large : étroite + `(puis-je \| peut-on \| pouvons-nous \| peut-il/elle) utiliser` | 7/10, **9/10** | 14/17, 17/17 | 16/17 | 1 (§ 2) | **7** |
+
+- **Entrée étroite retenue** : aucun recul, trois mesures montent. Dans v0 et v1, seule q24 la déclenche : aucune autre ligne du tableau des rangs ne change. q24 : l'art. 5, § 1, a-e passe au rang 1 et le morceau f-h (points f à h, celui qui répond) au rang 2 ; les deux entrent dans les passages (limite de 2 par article).
+- **Entrée large rejetée** par la règle de décision : « Puis-je utiliser une IA pour trier des CV ? » (q09) recule du rang 3 au rang 7, et v0 passe de 10 à 9/10 ; « interdite » fait entrer l'art. 5 et sortir l'art. 26 (obligations des déployeurs). La forme « puis-je » est trop générale : elle sert aussi à « combien de temps puis-je garder… » (q03).
+- Rappel de méthode (section 0) : cette entrée a été choisie en regardant q24, une question v1. Le 17/17 sur v1 est donc optimiste ; seule `questions_v2.jsonl` (+ questions de l'auteur) dira ce que vaut l'entrée sur des questions jamais vues.
+
+Code : une ligne dans `src/compliance_copilot/lexicon.py` ; test `test_lexicon_translates_the_form_of_a_permission_question_without_its_subject` dans `tests/test_lexical.py` (les formes retenues déclenchent l'entrée, « puis-je utiliser » et « puis-je garder » non).
+
+### 6.1 q24 rejouée de bout en bout avec l'entrée (recherche réelle, génération, juge), 2 essais par modèle
+
+Passages trouvés (identiques aux 4 essais) : [1] art. 5, § 1, a-e · [2] art. 5, § 1, f-h · [3] art. 50, § 3 · [4] annexe III, point 6 · [5] art. 3, définition 39.
+
+| Modèle | Extraits vérifiés | Extrait de l'art. 5, § 1, f) | Juge | Réponse affichée | Alertes du code |
+|---|---|---|---|---|---|
+| distant `qwen/qwen3.8-27b` (2/2 identiques) | 4/4 | oui, cité [2] | OUI | « Non, vous n'avez pas le droit…, car l'AI Act interdit « … inférer les émotions d'une personne physique sur le lieu de travail… » [2]. Cette interdiction comporte une exception : … « sauf lorsque … pour des raisons médicales ou de sécurité » [2]. … » | 1 (une « » de l'art. 50 hors des extraits vérifiés) |
+| local `qwen3:4b-instruct` (2/2 de même sens) | 1/2 (l'extrait cité [1] n'y est pas retrouvé mot pour mot ; seul celui de l'art. 50, § 3 est vérifié) | non | OUI | **« Oui, vous pouvez utiliser une IA qui analyse les émotions de vos salariés, à condition que l'utilisation ne soit pas destinée à des fins de surveillance ou de contrôle au travail, sauf pour des raisons médicales ou de sécurité… »** | 3 (extrait introuvable, citation [1] sans extrait vérifié, exception qui ne reprend pas les extraits) |
+
+**Lecture, pas un verdict** (relecture de l'auteur à venir) :
+
+- En **mode distant**, l'étape 1 règle q24 : réponse fidèle, condition et exception recopiées entre « », les deux fois.
+- En **mode local**, l'étape 1 remplace une abstention « sans danger » par une réponse **inversée**, donc « dangereux » selon la grille (on juge la réponse affichée, pas les alertes). Le modèle local a le bon passage sous les yeux ([2]), ne le recopie pas correctement (extrait attribué à [1], non vérifié) et conclut « Oui, vous pouvez ». C'est l'erreur de rédaction déjà vue à la séance 6 sur cette question (« pour des raisons autres que médicales »), quand l'ancienne entrée de lexique trouvait l'art. 5. Les trois alertes du code la signalent, comme prévu, mais ne la corrigent pas.
+- Le juge local dit OUI les deux fois, parce que les extraits vérifiés changent (art. 50, § 3 seul) : nouvelle illustration de son instabilité (section 2.3).
+
+**Décision à prendre par l'auteur** : garder l'entrée (recherche meilleure sur v0 et v1, q24 juste en mode distant, le modèle retenu de la séance 7 ; en local, réponse fausse mais signalée) ou la retirer (abstention locale sans danger, art. 5 absent en distant aussi). L'étape 2 (juge local) ne changerait rien ici : le problème local est la rédaction, pas le juge. Une piste générale pour la suite, non mesurée : quand un extrait n'est pas retrouvé dans le passage cité mais l'est mot pour mot dans un autre passage du même article, le réattribuer avec une alerte, au lieu de l'ignorer.
