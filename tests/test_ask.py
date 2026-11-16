@@ -1,13 +1,18 @@
-"""Offline tests for scripts/ask.py in remote mode: the notice, the signature, the personal-data guard before any
-call, and the clear errors. No index, no Ollama, no API: everything the script calls is faked."""
+"""Offline tests for scripts/ask.py in remote mode: the notice, the signature, the model of the chosen mode, the
+refusal of personal data (raised by the core, only shown by the script) and the clear errors. No index, no Ollama,
+no API: everything the script calls is faked, except the guard itself, which the fake answer_question runs first
+exactly as rag.answer_question does."""
 
+import dataclasses
 import importlib.util
 from pathlib import Path
 
 import pytest
+from conftest import FakeChatModel
 
 from compliance_copilot.config import Settings
 from compliance_copilot.llm import Generation, LLMError
+from compliance_copilot.privacy import refuse_personal_data
 from compliance_copilot.rag import CitationCheck, RagAnswer
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "ask.py"
@@ -16,9 +21,7 @@ ask = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ask)
 
 LOCAL = Settings(ollama_base_url="http://localhost:11434", llm_model="qwen3:4b-instruct", embedding_model="bge-m3", answer_judge=False)
-REMOTE = Settings(ollama_base_url="http://localhost:11434", llm_model="qwen/qwen3.8-27b", embedding_model="bge-m3",
-                  llm_backend="openai", llm_api_base_url="https://api.groq.com/openai/v1", llm_api_key_env="TEST_LLM_API_KEY",
-                  answer_judge=False)
+REMOTE = dataclasses.replace(LOCAL, llm_backend="openai", llm_api_base_url="https://api.groq.com/openai/v1", llm_api_key_env="TEST_LLM_API_KEY")
 QUESTION = "Dois-je désigner un DPO ?"
 
 
@@ -33,8 +36,9 @@ class Calls:
     """What the faked pipeline was asked to do."""
 
     def __init__(self):
-        self.embedder = self.chat_model = 0
-        self.questions: list[str] = []
+        self.embedder = 0
+        self.chat_models: list[FakeChatModel] = []  # the fake clients built, with what they received in .messages
+        self.questions: list[str] = []  # the questions that reached the search and the model
 
 
 def run(monkeypatch, settings: Settings, argv: list[str], chat_model_error: LLMError | None = None) -> Calls:
@@ -45,16 +49,19 @@ def run(monkeypatch, settings: Settings, argv: list[str], chat_model_error: LLME
         return object()
 
     def fake_chat_model(settings):
-        calls.chat_model += 1
         if chat_model_error:
             raise chat_model_error
-        return object()
+        model = FakeChatModel()
+        model.model, model.remote = settings.generation_model, settings.remote
+        model.provider = "Groq" if settings.remote else "Ollama"
+        calls.chat_models.append(model)
+        return model
 
     def fake_answer(question, index_dir, embedder, chat_model, **kwargs):
+        refuse_personal_data(question, chat_model)  # the first thing rag.answer_question does
         calls.questions.append(question)
         answer = rag_answer()
-        if kwargs.get("on_text"):  # without the judge, the answer is streamed as it is written
-            kwargs["on_text"](answer.text)
+        chat_model.generate([{"role": "user", "content": question}], on_text=kwargs.get("on_text"))
         return answer
 
     monkeypatch.setattr(ask, "load_settings", lambda: settings)
@@ -66,7 +73,7 @@ def run(monkeypatch, settings: Settings, argv: list[str], chat_model_error: LLME
 
 
 def test_remote_mode_warns_before_the_answer_and_names_the_model_after_it(monkeypatch, capsys):
-    calls = run(monkeypatch, LOCAL, ["--backend", "openai", "--model", "qwen/qwen3.8-27b", QUESTION])
+    calls = run(monkeypatch, LOCAL, ["--backend", "openai", QUESTION])  # no --model: LLM_API_MODEL, qwen/qwen3.8-27b
 
     assert ask.main() == 0
     out = capsys.readouterr().out
@@ -76,6 +83,17 @@ def test_remote_mode_warns_before_the_answer_and_names_the_model_after_it(monkey
     assert out.index("Oui [1].") < out.index("Réponse rédigée par qwen/qwen3.8-27b, modèle distant servi par Groq.")
     assert "attente des limites de l'API 12 s (non comptée)" in out
     assert calls.questions == [QUESTION]
+    assert [model.model for model in calls.chat_models] == ["qwen/qwen3.8-27b"]  # the fake client was built for the remote model
+
+
+def test_model_option_replaces_the_model_of_the_chosen_mode(monkeypatch, capsys):
+    calls = run(monkeypatch, LOCAL, ["--backend", "openai", "--model", "other/remote-model", QUESTION])
+    assert ask.main() == 0 and [model.model for model in calls.chat_models] == ["other/remote-model"]
+    assert "Réponse rédigée par other/remote-model, modèle distant servi par Groq." in capsys.readouterr().out
+
+    calls = run(monkeypatch, LOCAL, ["--model", "ministral-3:3b", QUESTION])
+    assert ask.main() == 0 and [model.model for model in calls.chat_models] == ["ministral-3:3b"]
+    assert "Réponse rédigée par ministral-3:3b, modèle local (Ollama)" in capsys.readouterr().out
 
 
 def test_local_mode_has_no_notice_and_signs_as_local(monkeypatch, capsys):
@@ -96,16 +114,18 @@ def test_local_mode_has_no_notice_and_signs_as_local(monkeypatch, capsys):
         ("Le NIR 1 85 05 78 006 084 36 est-il une donnée sensible ?", "un numéro de sécurité sociale"),
     ],
 )
-def test_remote_mode_refuses_personal_data_before_building_or_calling_anything(monkeypatch, capsys, question, kind):
+def test_remote_mode_shows_the_refusal_of_the_core_and_nothing_reaches_the_client(monkeypatch, capsys, question, kind):
     calls = run(monkeypatch, REMOTE, [question])
 
     assert ask.main() == 2
     out = capsys.readouterr().out
     assert f"[REFUS] La question contient {kind} : en mode distant, rien n'a été envoyé à Groq." in out
-    assert "--backend ollama" in out and "Mode distant :" not in out
-    assert calls.embedder == 0 and calls.chat_model == 0 and calls.questions == []
+    assert "--backend ollama" in out
+    assert calls.questions == []  # the guard stopped the question before the search
+    assert [model.messages for model in calls.chat_models] == [[]]  # the fake client received nothing
+    refusal = out[out.index("[REFUS]"):]  # the question itself is echoed above, on the user's own screen
     for value in ("jean.dupont@example.org", "06 12 34 56 78", "3456 7890", "006 084 36"):
-        assert value not in out  # the data is never repeated
+        assert value not in refusal  # the refusal never repeats the data
 
 
 def test_local_mode_never_blocks(monkeypatch, capsys):
@@ -124,9 +144,12 @@ def test_a_missing_key_is_a_clear_error_before_any_question_is_sent(monkeypatch,
     assert "[ERREUR] Clé absente" in out and "--backend ollama" in out and calls.questions == []
 
 
-def test_helpers():
-    assert ask.provider(REMOTE) == "Groq"
-    assert ask.provider(Settings(ollama_base_url="", llm_model="m", embedding_model="e", llm_api_base_url="https://api.example.test/v1")) == "api.example.test"
-    assert ask.blocked_message(QUESTION, REMOTE) is None
+def test_overrides_touch_only_the_model_of_the_chosen_mode():
     assert ask.apply_overrides(LOCAL, None, None) is LOCAL
-    assert ask.apply_overrides(LOCAL, "openai", None).llm_backend == "openai" and ask.apply_overrides(LOCAL, "openai", None).llm_model == LOCAL.llm_model
+    remote = ask.apply_overrides(LOCAL, "openai", None)
+    assert remote.llm_backend == "openai" and remote.generation_model == "qwen/qwen3.8-27b" and remote.llm_model == LOCAL.llm_model
+    remote = ask.apply_overrides(LOCAL, "openai", "other/remote-model")
+    assert remote.llm_api_model == "other/remote-model" and remote.llm_model == LOCAL.llm_model
+    local = ask.apply_overrides(REMOTE, "ollama", "ministral-3:3b")
+    assert local.llm_model == "ministral-3:3b" and local.llm_api_model == REMOTE.llm_api_model
+    assert ask.apply_overrides(LOCAL, None, "ministral-3:3b").llm_model == "ministral-3:3b"

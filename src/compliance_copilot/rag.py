@@ -19,6 +19,7 @@ from compliance_copilot.embeddings import Embedder
 from compliance_copilot.index import SearchResult, search
 from compliance_copilot.lexical import tokenize
 from compliance_copilot.llm import ChatModel, Generation
+from compliance_copilot.privacy import refuse_personal_data
 
 # Written with "vous" from start to end: a prompt that says "tu" to the model makes it say "tu" to the user.
 SYSTEM_PROMPT = """Vous êtes le copilote de conformité : vous aidez les PME et les associations à comprendre le RGPD et l'AI Act.
@@ -739,7 +740,11 @@ def answer_question(
     judge: bool = False,
     first_paragraph: bool = False,
 ) -> RagAnswer:
-    """Search the closest passages, have the model quote them and answer, then check everything."""
+    """Search the closest passages, have the model quote them and answer, then check everything.
+
+    With a remote model, a question that holds personal data raises PersonalDataError before the search and
+    before anything is sent (compliance_copilot.privacy)."""
+    refuse_personal_data(question, chat_model)
     start = time.perf_counter()
     found = search(question, index_dir, embedder, k=k, mode=mode, lexicon=lexicon, max_per_article=max_per_article,
                    first_paragraph=first_paragraph)

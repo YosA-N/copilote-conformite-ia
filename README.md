@@ -154,7 +154,7 @@ Depuis la séance 7, un **mode distant** est proposé en option : la rédaction 
 **Ce qu'il faut savoir avant de l'activer :**
 - `qwen/qwen3.8-27b` est un modèle en **preview** chez Groq : il peut changer ou disparaître sans préavis (`llama-3.3-70b-versatile`, prévu au départ, a été retiré le 16/08/2026). Le copilote le dit alors clairement et propose de revenir au mode local.
 - **Votre question et les extraits de loi sont envoyés à Groq.** Avant chaque réponse, une ligne le rappelle, et le modèle qui a rédigé la réponse est nommé sous celle-ci.
-- **N'y mettez jamais de données personnelles** (nom, situation d'une personne, données de clients ou d'adhérents…). Un garde-fou refuse d'envoyer une question qui contient une adresse e-mail, un numéro de téléphone, un IBAN ou un numéro de sécurité sociale français, par de simples expressions régulières (`src/compliance_copilot/privacy.py`). **Il ne détecte ni les noms ni les situations personnelles : c'est un filet de sécurité, pas une garantie.** En mode local, rien n'est bloqué, puisque rien ne sort de l'ordinateur.
+- **N'y mettez jamais de données personnelles** (nom, situation d'une personne, données de clients ou d'adhérents…). Un garde-fou, appliqué dans le cœur du copilote (`rag.answer_question`, donc pour toute interface, présente ou future), refuse d'envoyer une question qui contient une adresse e-mail, un numéro de téléphone, un IBAN ou un numéro de sécurité sociale français, par de simples expressions régulières (`src/compliance_copilot/privacy.py`). **Il ne détecte ni les noms ni les situations personnelles : c'est un filet de sécurité, pas une garantie.** En mode local, rien n'est bloqué, puisque rien ne sort de l'ordinateur.
 
 **Ce que dit Groq de ses données** (page *Your Data in GroqCloud*, relue le 14/11/2026) : pas de conservation des requêtes par défaut ; des journaux (entrées et sorties) peuvent être gardés jusqu'à 30 jours pour la fiabilité et la lutte contre les abus, désactivables dans « Data Controls » ; l'option « Zero Data Retention » y est ouverte à tous ; les données conservées le sont aux États-Unis (Google Cloud). La page ne dit rien de l'entraînement des modèles.
 
@@ -162,18 +162,18 @@ Depuis la séance 7, un **mode distant** est proposé en option : la rédaction 
 
 **Activer le mode distant :**
 1. créez une clé sur la console Groq et mettez-la dans `.env`, ligne `GROQ_API_KEY=…` (ce fichier est ignoré par Git ; jamais la clé ailleurs) ;
-2. pour une question : `.venv\Scripts\python scripts\ask.py --backend openai --model qwen/qwen3.8-27b "Dois-je tenir un registre des traitements ?"` ;
-3. pour en faire le mode par défaut : `LLM_BACKEND=openai` et `LLM_MODEL=qwen/qwen3.8-27b` dans `.env` (`LLM_API_REASONING_EFFORT` vide vaut `none` pour ce modèle).
+2. pour une question : `.venv\Scripts\python scripts\ask.py --backend openai "Dois-je tenir un registre des traitements ?"` (le modèle distant est `qwen/qwen3.8-27b` par défaut : `LLM_API_MODEL`, ou `--model` pour une seule question) ;
+3. pour en faire le mode par défaut : `LLM_BACKEND=openai` dans `.env`, et rien d'autre (`LLM_MODEL` reste le modèle local, `LLM_API_REASONING_EFFORT` vide vaut `none` pour ce modèle).
 
 | Réglage | Valeur | Rôle |
 |---|---|---|
 | `LLM_BACKEND` ou `--backend` | `ollama` (défaut) ou `openai` | Mode local ou distant |
-| `LLM_MODEL` ou `--model` | `qwen/qwen3.8-27b` | Modèle distant retenu |
+| `LLM_API_MODEL` ou `--model` (en mode distant) | `qwen/qwen3.8-27b` (défaut) | Modèle distant ; `LLM_MODEL` reste le modèle local |
 | `LLM_API_BASE_URL` | `https://api.groq.com/openai/v1` | Adresse de l'API |
 | `LLM_API_KEY_ENV` | `GROQ_API_KEY` | **Nom** de la variable de `.env` qui contient la clé |
-| `LLM_API_REASONING_EFFORT` ou `--reasoning-effort` | vide (`none` pour qwen3.8-27b) | Réglage `reasoning_effort` envoyé à l'API |
+| `LLM_API_REASONING_EFFORT` | vide (`none` pour qwen3.8-27b) | Réglage `reasoning_effort` envoyé à l'API ; l'option `--reasoning-effort` n'existe que dans `answer_questions.py` et `check_api.py`, pas dans `ask.py` |
 
-`scripts\check_api.py --model qwen/qwen3.8-27b` fait un appel d'essai et affiche les modèles ouverts à votre clé et les limites réelles de votre compte. Avant chaque commit, `scripts\scan_secrets.py` vérifie qu'aucune clé n'est sur le point d'être publiée. Les fichiers de réponses de l'expérience (`eval/answers_*_big_*.md`) et sa comparaison (`scripts\compare_answers.py`) restent dans le dépôt.
+`scripts\check_api.py` fait un appel d'essai avec `LLM_API_MODEL` (ou `--model`) et affiche les modèles ouverts à votre clé et les limites réelles de votre compte. Avant chaque commit, `scripts\scan_secrets.py` vérifie qu'aucune clé n'est sur le point d'être publiée. Les fichiers de réponses de l'expérience (`eval/answers_*_big_*.md`) et sa comparaison (`scripts\compare_answers.py`) restent dans le dépôt.
 
 ## Sources juridiques
 

@@ -13,6 +13,7 @@ import re
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -42,6 +43,8 @@ class ChatModel(Protocol):
     model: str
     num_ctx: int  # context size in tokens: prompt + answer must fit in it
     max_tokens: int
+    remote: bool  # True when the messages leave the computer: the personal-data guard of rag.answer_question then applies
+    provider: str  # who serves the model ("Ollama", "Groq"…), named in the refusal of the guard
 
     def generate(self, messages: list[dict], on_text: Callable[[str], None] | None = None) -> Generation:
         """Answer the conversation; on_text receives each piece of text as soon as it is written."""
@@ -52,8 +55,17 @@ class LLMError(RuntimeError):
     """A generation request failed; the message can be shown to the user as is."""
 
 
+def provider_name(base_url: str) -> str:
+    """'Groq' for api.groq.com, else the host name of the API."""
+    host = urllib.parse.urlparse(base_url).hostname or base_url
+    return "Groq" if "groq" in host else host
+
+
 class OllamaChatModel:
     """Chat with a model served by the local Ollama server (POST /api/chat, streamed)."""
+
+    remote = False
+    provider = "Ollama"
 
     def __init__(
         self,
@@ -152,6 +164,8 @@ class OpenAICompatibleChatModel:
     to Generation.reasoning, and its tokens count in completion_tokens and in the max_tokens limit.
     """
 
+    remote = True  # the question and the passages leave the computer: rag.answer_question refuses personal data
+
     def __init__(
         self,
         base_url: str,
@@ -167,6 +181,7 @@ class OpenAICompatibleChatModel:
         sleep: Callable[[float], None] = time.sleep,
     ):
         self.base_url = base_url.rstrip("/")
+        self.provider = provider_name(self.base_url)
         self.model = model
         self.api_key_env = api_key_env
         self.num_ctx = num_ctx  # kept for fit_passages, so that the passages stay those of the local model
@@ -292,14 +307,14 @@ def default_reasoning_effort(model: str) -> str:
 
 
 def make_chat_model(settings: Settings) -> OllamaChatModel | OpenAICompatibleChatModel:
-    """The language model configured in .env: local Ollama by default."""
+    """The language model configured in .env: local Ollama (LLM_MODEL) by default, the remote API (LLM_API_MODEL) with LLM_BACKEND=openai."""
     if settings.llm_backend not in LLM_BACKENDS:
         raise LLMError(f"LLM_BACKEND doit valoir {' ou '.join(LLM_BACKENDS)} (reçu : {settings.llm_backend}).")
     if settings.llm_backend == "openai":
-        effort = settings.llm_api_reasoning_effort or default_reasoning_effort(settings.llm_model)
+        effort = settings.llm_api_reasoning_effort or default_reasoning_effort(settings.llm_api_model)
         return OpenAICompatibleChatModel(
             settings.llm_api_base_url,
-            settings.llm_model,
+            settings.llm_api_model,
             settings.llm_api_key_env,
             num_ctx=settings.llm_num_ctx,
             temperature=settings.llm_temperature,

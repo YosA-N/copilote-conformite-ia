@@ -2,7 +2,7 @@
 
 import pytest
 
-from compliance_copilot.privacy import PERSONAL_DATA, personal_data_found, refusal_message
+from compliance_copilot.privacy import PERSONAL_DATA, PersonalDataError, personal_data_found, refusal_message, refuse_personal_data
 
 
 @pytest.mark.parametrize(
@@ -54,3 +54,22 @@ def test_refusal_message_names_the_kinds_and_the_way_out_without_the_data():
     assert "--backend ollama" in message and "@" not in message
     three = refusal_message(["une adresse e-mail", "un numéro de téléphone", "un IBAN"], "Groq")
     assert "une adresse e-mail, un numéro de téléphone et un IBAN" in three
+
+
+class Remote:
+    remote, provider = True, "Groq"
+
+
+class Local:
+    remote, provider = False, "Ollama"
+
+
+def test_the_guard_refuses_only_a_remote_model_and_never_repeats_the_data():
+    refuse_personal_data("Dois-je désigner un DPO ?", Remote())  # nothing to refuse
+    refuse_personal_data("Écrire à a@b.fr ?", Local())  # local: nothing leaves the computer
+
+    with pytest.raises(PersonalDataError) as error:
+        refuse_personal_data("Écrire à a@b.fr ?", Remote())
+    assert error.value.kinds == ["une adresse e-mail"] and error.value.provider == "Groq"
+    assert str(error.value).startswith("La question contient une adresse e-mail : en mode distant, rien n'a été envoyé à Groq.")
+    assert "a@b.fr" not in str(error.value)

@@ -4,9 +4,14 @@ Only simple, documented regular expressions, on four kinds of data that are easy
 address, a French phone number, an IBAN and a French social security number (NIR). Names, situations
 or health facts are NOT detected: this is a safety net, not a guarantee, as the README says.
 In local mode nothing leaves the computer, so nothing is blocked.
+
+The guard lives in the core: rag.answer_question calls refuse_personal_data() first, before the search and
+before any call to the API, so every entry point (scripts/ask.py, a web interface…) is protected without
+having to think of it. An entry point only has to show the PersonalDataError it receives.
 """
 
 import re
+from typing import Protocol
 
 PERSONAL_DATA = {
     # user@example.org, prenom.nom+tag@sous.domaine.fr
@@ -26,6 +31,29 @@ PERSONAL_DATA = {
 def personal_data_found(text: str) -> list[str]:
     """The kinds of personal data found in the text, in a fixed order; empty when none is found."""
     return [kind for kind, pattern in PERSONAL_DATA.items() if pattern.search(text)]
+
+
+class PersonalDataError(ValueError):
+    """The question holds personal data and the model is remote: nothing was sent. str() is the message to show."""
+
+    def __init__(self, kinds: list[str], provider: str):
+        super().__init__(refusal_message(kinds, provider))
+        self.kinds = kinds
+        self.provider = provider
+
+
+class RemoteOrLocal(Protocol):
+    remote: bool
+    provider: str
+
+
+def refuse_personal_data(question: str, chat_model: RemoteOrLocal) -> None:
+    """Raise PersonalDataError when the model is remote and the question holds personal data; nothing otherwise."""
+    if not getattr(chat_model, "remote", False):
+        return
+    kinds = personal_data_found(question)
+    if kinds:
+        raise PersonalDataError(kinds, getattr(chat_model, "provider", "l'API distante"))
 
 
 def refusal_message(kinds: list[str], provider: str) -> str:

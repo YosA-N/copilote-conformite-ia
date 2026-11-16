@@ -8,7 +8,7 @@ quota of an API is used up); --resume then keeps the answers already in the file
 Usage, from the repository root:
     .venv\\Scripts\\python scripts\\answer_questions.py [--version v1]
     .venv\\Scripts\\python scripts\\answer_questions.py --questions eval\\questions_v1.jsonl --version heldout_v3
-    .venv\\Scripts\\python scripts\\answer_questions.py --backend openai --model qwen/qwen3.8-27b --reasoning-effort none --version v4_big_qwen27b
+    .venv\\Scripts\\python scripts\\answer_questions.py --backend openai --reasoning-effort none --version v4_big_qwen27b
 """
 
 import argparse
@@ -144,13 +144,13 @@ def generation_line(settings: Settings) -> str:
         else:
             gpu = "toutes" if settings.llm_num_gpu >= 99 else str(settings.llm_num_gpu)
         return (
-            f"- Génération : `{settings.llm_model}` via Ollama {ollama_version(settings.ollama_base_url)} — température "
+            f"- Génération : `{settings.generation_model}` via Ollama {ollama_version(settings.ollama_base_url)} — température "
             f"{settings.llm_temperature}, contexte {settings.llm_num_ctx} tokens, couches sur la carte graphique : {gpu}, "
             f"{settings.llm_max_tokens} tokens au plus par réponse"
         )
     effort = settings.llm_api_reasoning_effort
     return (
-        f"- Génération : `{settings.llm_model}` via l'API compatible OpenAI {settings.llm_api_base_url} (expérience de la "
+        f"- Génération : `{settings.generation_model}` via l'API compatible OpenAI {settings.llm_api_base_url} (expérience de la "
         "séance 7, questions de test seulement ; modèle tel que servi par l'API à la date ci-dessus) — température "
         f"{settings.llm_temperature}, raisonnement : {'« ' + effort + ' » (reasoning_effort)' if effort else 'réglage par défaut du modèle'}, "
         f"passages calculés pour un contexte de {settings.llm_num_ctx} tokens comme en local, {settings.llm_max_tokens} tokens au plus "
@@ -202,7 +202,7 @@ def main() -> int:
     parser.add_argument("--questions", type=Path, nargs="+", default=QUESTION_FILES,
                         help="fichiers de questions à poser (par défaut : questions v0 et hors sujet v0)")
     parser.add_argument("--backend", choices=LLM_BACKENDS, help="moteur de génération, à la place de LLM_BACKEND du .env")
-    parser.add_argument("--model", help="modèle, à la place de LLM_MODEL du .env")
+    parser.add_argument("--model", help="modèle, à la place de LLM_API_MODEL (mode distant) ou de LLM_MODEL (mode local) du .env")
     parser.add_argument("--reasoning-effort", help="reasoning_effort envoyé à l'API (none, low…), à la place de LLM_API_REASONING_EFFORT")
     parser.add_argument("--resume", action="store_true",
                         help="garder les réponses déjà dans le fichier et ne poser que les questions qui manquent")
@@ -210,16 +210,14 @@ def main() -> int:
     output = EVAL_DIR / f"answers_{args.version}.md"
 
     settings = load_settings()
-    overrides = {}
     if args.backend:
-        overrides["llm_backend"] = args.backend
-    if args.model:
-        overrides["llm_model"] = args.model
+        settings = dataclasses.replace(settings, llm_backend=args.backend)
+    if args.model:  # the model of the chosen mode
+        settings = dataclasses.replace(settings, **{"llm_api_model" if settings.remote else "llm_model": args.model})
     if args.reasoning_effort is not None:
-        overrides["llm_api_reasoning_effort"] = args.reasoning_effort.strip().lower()
-    settings = dataclasses.replace(settings, **overrides)
-    if settings.llm_backend != "ollama":
-        print(f"[API] Modèle distant {settings.llm_model} ({settings.llm_api_base_url}) : questions de test seulement, "
+        settings = dataclasses.replace(settings, llm_api_reasoning_effort=args.reasoning_effort.strip().lower())
+    if settings.remote:
+        print(f"[API] Modèle distant {settings.generation_model} ({settings.llm_api_base_url}) : questions de test seulement, "
               "aucune donnée personnelle.", flush=True)
     embedder = make_embedder(settings, settings.query_embedding_device)
     chat_model = make_chat_model(settings)
