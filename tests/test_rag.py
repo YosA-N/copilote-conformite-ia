@@ -683,3 +683,23 @@ def test_answer_is_streamed_and_timed(index_dir, fake_embedder):
     assert "".join(shown) == answer.text == "Oui, dans certains cas [1]."
     assert answer.search_seconds >= 0 and answer.generation_seconds >= 0
     assert answer.generation.tokens_per_second == 20.0
+
+
+def test_the_core_refuses_personal_data_for_a_remote_model_before_the_search(monkeypatch, index_dir, fake_embedder):
+    from compliance_copilot import rag
+    from compliance_copilot.privacy import PersonalDataError
+
+    question = "Puis-je garder l'adresse jean.dupont@example.org d'un ancien client ?"
+    local = FakeChatModel(reply=GOOD_REPLY)
+    answer_question(question, index_dir, fake_embedder, local)
+    assert local.messages  # local model: the question went through
+
+    def no_search(*args, **kwargs):
+        raise AssertionError("the search ran before the guard")
+
+    monkeypatch.setattr(rag, "search", no_search)
+    remote = FakeChatModel(reply=GOOD_REPLY)
+    remote.remote, remote.provider = True, "Groq"
+    with pytest.raises(PersonalDataError, match="rien n'a été envoyé à Groq") as error:
+        answer_question(question, index_dir, fake_embedder, remote)
+    assert remote.messages == [] and "jean.dupont" not in str(error.value)  # nothing was sent, nothing is repeated
