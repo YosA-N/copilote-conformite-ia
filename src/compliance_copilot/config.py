@@ -7,10 +7,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
-DEFAULT_API_BASE_URL = "https://api.groq.com/openai/v1"  # only for the session 7 experiment; the copilot stays local
+DEFAULT_API_BASE_URL = "https://api.groq.com/openai/v1"  # remote mode (optional): the copilot stays local by default
+DEFAULT_API_MODEL = "qwen/qwen3.8-27b"  # remote model retained in session 7 (eval/results_v3.md); preview at Groq
 DEFAULT_API_KEY_ENV = "GROQ_API_KEY"  # the NAME of the variable that holds the key, never the key itself
 LLM_BACKENDS = ("ollama", "openai")
-DEFAULT_LLM_MODEL = "qwen3:4b-instruct"  # chosen in session 5 (eval/results_v1.md); before: ministral-3:3b
+DEFAULT_LLM_MODEL = "qwen3:4b-instruct"  # local model, chosen in session 5 (eval/results_v1.md); before: ministral-3:3b
 DEFAULT_EMBEDDING_MODEL = "bge-m3"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -37,10 +38,21 @@ class Settings:
     search_k: int = 5  # passages given to the language model (8 measured at session 6: slower, no gain with the lexicon)
     search_first_paragraph: bool = True  # add the first paragraph of an article when a later one is kept (session 6)
     answer_judge: bool = True  # second short call: do the verified extracts answer the question directly?
-    llm_backend: str = "ollama"  # "ollama" (local, the default) or "openai" (an OpenAI-compatible API, session 7 experiment)
+    llm_backend: str = "ollama"  # "ollama" (local, the default) or "openai" (an OpenAI-compatible API: the remote mode)
     llm_api_base_url: str = DEFAULT_API_BASE_URL
+    llm_api_model: str = DEFAULT_API_MODEL  # model used in remote mode; llm_model stays the local one
     llm_api_key_env: str = DEFAULT_API_KEY_ENV  # name of the environment variable that holds the API key
     llm_api_reasoning_effort: str = ""  # reasoning_effort sent to the API when set (none, low…, depends on the model); empty = not sent
+
+    @property
+    def remote(self) -> bool:
+        """True when the answers are written by a remote API, not by the local Ollama server."""
+        return self.llm_backend != "ollama"
+
+    @property
+    def generation_model(self) -> str:
+        """The model that writes the answers in the chosen mode: LLM_API_MODEL in remote mode, else LLM_MODEL."""
+        return self.llm_api_model if self.remote else self.llm_model
 
 
 def optional_int(value: str | None) -> int | None:
@@ -69,6 +81,7 @@ def load_settings() -> Settings:
         answer_judge=os.getenv("ANSWER_JUDGE", "on").strip().lower() in {"on", "1", "true", "oui"},
         llm_backend=os.getenv("LLM_BACKEND", "ollama").strip().lower(),
         llm_api_base_url=os.getenv("LLM_API_BASE_URL", DEFAULT_API_BASE_URL).rstrip("/"),
+        llm_api_model=os.getenv("LLM_API_MODEL", DEFAULT_API_MODEL).strip(),
         llm_api_key_env=os.getenv("LLM_API_KEY_ENV", DEFAULT_API_KEY_ENV).strip(),
         llm_api_reasoning_effort=os.getenv("LLM_API_REASONING_EFFORT", "").strip().lower(),
     )

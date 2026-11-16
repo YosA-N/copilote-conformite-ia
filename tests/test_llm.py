@@ -9,7 +9,7 @@ import pytest
 
 from compliance_copilot import llm
 from compliance_copilot.config import Settings, optional_int
-from compliance_copilot.llm import LLMError, OllamaChatModel, OpenAICompatibleChatModel, make_chat_model
+from compliance_copilot.llm import LLMError, OllamaChatModel, OpenAICompatibleChatModel, make_chat_model, provider_name
 
 BASE_URL = "http://localhost:11434"
 MESSAGES = [{"role": "user", "content": "Dois-je désigner un DPO ?"}]
@@ -225,11 +225,15 @@ def test_missing_key_is_reported_before_any_call(monkeypatch):
 def test_backend_is_chosen_in_the_settings(monkeypatch):
     monkeypatch.setenv(KEY_ENV, FAKE_KEY)
     local = Settings(ollama_base_url=BASE_URL, llm_model="qwen3:4b-instruct", embedding_model="bge-m3")
-    api = dataclasses.replace(local, llm_backend="openai", llm_model="big-model", llm_api_base_url=API_URL, llm_api_key_env=KEY_ENV)
+    api = dataclasses.replace(local, llm_backend="openai", llm_api_model="big-model", llm_api_base_url=API_URL, llm_api_key_env=KEY_ENV)
 
     assert isinstance(make_chat_model(local), OllamaChatModel)  # local by default
+    assert make_chat_model(local).model == "qwen3:4b-instruct" and make_chat_model(local).remote is False
     remote = make_chat_model(api)
     assert isinstance(remote, OpenAICompatibleChatModel) and remote.num_ctx == local.llm_num_ctx
+    assert remote.model == "big-model" and remote.remote is True  # LLM_API_MODEL, while LLM_MODEL stays the local model
+    assert make_chat_model(dataclasses.replace(api, llm_api_model="qwen/qwen3.8-27b")).model == "qwen/qwen3.8-27b"
+    assert api.generation_model == "big-model" and local.generation_model == "qwen3:4b-instruct"
     assert remote.reasoning_effort == ""
     assert make_chat_model(dataclasses.replace(api, llm_api_reasoning_effort="none")).reasoning_effort == "none"
     with pytest.raises(LLMError, match="LLM_BACKEND"):
@@ -280,6 +284,41 @@ def test_models_list_errors_are_explained_without_the_key(monkeypatch, api_model
     assert KEY_ENV in str(error.value) and FAKE_KEY not in str(error.value)
 
 
+def test_retired_model_says_so_and_how_to_go_back_to_local_mode(monkeypatch, api_model):
+    model, _ = api_model
+    body = io.BytesIO(b'{"error": {"message": "The model `big-model` has been decommissioned", "code": "model_decommissioned"}}')
+    answer_in_turn(monkeypatch, urllib.error.HTTPError(f"{API_URL}/chat/completions", 400, "error", {}, body), api_error(404))
+
+    for _ in range(2):
+        with pytest.raises(LLMError) as error:
+            model.generate(MESSAGES)
+        assert "retiré ou inconnu" in str(error.value) and "preview" in str(error.value)
+        assert "--backend ollama" in str(error.value) and FAKE_KEY not in str(error.value)
+
+
+def test_quota_and_missing_key_errors_say_how_to_go_back_to_local_mode(monkeypatch, api_model):
+    model, _ = api_model
+    answer_in_turn(monkeypatch, api_error(429, retry_after="3600"))
+    with pytest.raises(LLMError, match="Quota de l'API atteint pour aujourd'hui") as error:
+        model.generate(MESSAGES)
+    assert "--backend ollama" in str(error.value)
+
+    monkeypatch.delenv(KEY_ENV, raising=False)
+    with pytest.raises(LLMError, match="Clé absente") as error:
+        OpenAICompatibleChatModel(API_URL, "big-model", KEY_ENV).generate(MESSAGES)
+    assert "--backend ollama" in str(error.value) and FAKE_KEY not in str(error.value)
+
+
+def test_default_reasoning_effort_is_none_for_qwen3_only(monkeypatch):
+    monkeypatch.setenv(KEY_ENV, FAKE_KEY)
+    base = Settings(ollama_base_url=BASE_URL, llm_model="qwen3:4b-instruct", embedding_model="bge-m3", llm_backend="openai",
+                    llm_api_base_url=API_URL, llm_api_key_env=KEY_ENV)  # LLM_API_MODEL left to its default, qwen/qwen3.8-27b
+
+    assert make_chat_model(base).model == "qwen/qwen3.8-27b" and make_chat_model(base).reasoning_effort == "none"
+    assert make_chat_model(dataclasses.replace(base, llm_api_reasoning_effort="low")).reasoning_effort == "low"
+    assert make_chat_model(dataclasses.replace(base, llm_api_model="openai/gpt-oss-120b")).reasoning_effort == ""
+
+
 def test_error_sent_in_the_middle_of_the_stream(monkeypatch):
     monkeypatch.setattr(
         llm.urllib.request,
@@ -289,3 +328,9 @@ def test_error_sent_in_the_middle_of_the_stream(monkeypatch):
 
     with pytest.raises(LLMError, match="LLM_NUM_CTX"):
         OllamaChatModel(BASE_URL, "ministral-3:3b").generate(MESSAGES)
+
+
+def test_provider_is_named_from_the_api_address():
+    assert provider_name("https://api.groq.com/openai/v1") == "Groq"
+    assert provider_name("https://api.example.test/v1/") == "api.example.test"
+    assert OllamaChatModel(BASE_URL, "qwen3:4b-instruct").provider == "Ollama"

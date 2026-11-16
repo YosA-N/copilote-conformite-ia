@@ -143,49 +143,37 @@ Avec ces valeurs, `qwen3:4b-instruct` occupe 3,68 Go sur une carte de 4 Go (`min
 2. baissez `LLM_NUM_GPU`, par exemple à `20` : une partie du modèle passe alors sur le processeur ;
 3. laissez `LLM_NUM_GPU` vide : Ollama choisit lui-même, mais la réponse est environ 4 fois plus lente.
 
-## Modèle distant : une expérience seulement (séance 7)
+## Mode distant (optionnel)
 
-**Le copilote reste local par défaut** (`LLM_BACKEND=ollama`) : vos questions ne quittent pas votre ordinateur.
+**Le copilote est local par défaut** (`LLM_BACKEND=ollama`) : vos questions ne quittent pas votre ordinateur.
 
-Pour une seule expérience (un modèle plus gros rédige-t-il mieux ?), le projet peut aussi appeler une API compatible OpenAI, ici le niveau gratuit de [Groq](https://groq.com). Deux modèles ont été essayés ; la recherche, les passages, le prompt, les contrôles, la température et la limite de 2 000 tokens restent ceux de la configuration v4 :
+Depuis la séance 7, un **mode distant** est proposé en option : la rédaction et le contrôle de pertinence sont confiés à `qwen/qwen3.8-27b`, servi par le niveau gratuit de [Groq](https://groq.com) (API compatible OpenAI). La recherche dans les textes reste locale.
 
-| Modèle | Taille | Réglage de raisonnement | Statut chez Groq (novembre 2026) |
-|---|---|---|---|
-| `qwen/qwen3.8-27b` | 27 milliards de paramètres (dense), même famille que le `qwen3:4b-instruct` local | `none` (désactivé) | preview : peut changer ou disparaître |
-| `openai/gpt-oss-120b` | 120 milliards de paramètres, dont 5,1 milliards actifs par token (MoE) | `low` (le minimum : ce modèle raisonne toujours) | production |
+**Pourquoi ce modèle** (`eval/results_v3.md`, relecture de l'auteur sur les 32 questions de test) : 0 réponse dangereuse contre 6 pour le modèle local, 25 justes contre 17, et un temps médian par question de 4 s contre 39 s. Le modèle plus gros `openai/gpt-oss-120b` a aussi été essayé et n'a pas été retenu (3 réponses dangereuses, et des extraits non retrouvés mot pour mot).
 
-Le modèle prévu au départ, `llama-3.3-70b-versatile`, a été retiré par Groq le 16/08/2026 pour les plans gratuit et développeur.
+**Ce qu'il faut savoir avant de l'activer :**
+- `qwen/qwen3.8-27b` est un modèle en **preview** chez Groq : il peut changer ou disparaître sans préavis (`llama-3.3-70b-versatile`, prévu au départ, a été retiré le 16/08/2026). Le copilote le dit alors clairement et propose de revenir au mode local.
+- **Votre question et les extraits de loi sont envoyés à Groq.** Avant chaque réponse, une ligne le rappelle, et le modèle qui a rédigé la réponse est nommé sous celle-ci.
+- **N'y mettez jamais de données personnelles** (nom, situation d'une personne, données de clients ou d'adhérents…). Un garde-fou, appliqué dans le cœur du copilote (`rag.answer_question`, donc pour toute interface, présente ou future), refuse d'envoyer une question qui contient une adresse e-mail, un numéro de téléphone, un IBAN ou un numéro de sécurité sociale français, par de simples expressions régulières (`src/compliance_copilot/privacy.py`). **Il ne détecte ni les noms ni les situations personnelles : c'est un filet de sécurité, pas une garantie.** En mode local, rien n'est bloqué, puisque rien ne sort de l'ordinateur.
 
-- Cette API n'a servi **qu'aux questions de test** du dépôt (`eval/questions_v0.jsonl`, `questions_offtopic_v0.jsonl`, `questions_v1.jsonl`) et aux extraits de loi trouvés par la recherche locale.
-- **Elle n'a reçu aucune donnée personnelle.**
-- **N'y posez jamais de question contenant des données personnelles** (nom, situation d'une personne, données de clients ou d'adhérents…).
+**Ce que dit Groq de ses données** (page *Your Data in GroqCloud*, relue le 14/11/2026) : pas de conservation des requêtes par défaut ; des journaux (entrées et sorties) peuvent être gardés jusqu'à 30 jours pour la fiabilité et la lutte contre les abus, désactivables dans « Data Controls » ; l'option « Zero Data Retention » y est ouverte à tous ; les données conservées le sont aux États-Unis (Google Cloud). La page ne dit rien de l'entraînement des modèles.
 
-Ce que dit Groq de ses données (page *Your Data in GroqCloud*, relue le 14/11/2026) :
-- par défaut, Groq ne conserve pas les données des requêtes ;
-- des journaux (entrées et sorties) peuvent être gardés jusqu'à 30 jours pour la fiabilité et la lutte contre les abus ; cette conservation se désactive dans les réglages « Data Controls » ;
-- l'option « Zero Data Retention » y est ouverte à tous les clients (activée par l'auteur pour l'expérience) ;
-- les données conservées le sont aux États-Unis (Google Cloud) ; la page ne dit rien de l'entraînement des modèles.
+**Limites du plan gratuit** (en-têtes de l'API, 15/11/2026) : 1 000 requêtes par jour, 8 000 tokens par minute, et 200 000 tokens par jour d'après la page des limites. Une question prend environ 4 500 tokens : le copilote attend quand la limite par minute est atteinte, et s'arrête proprement quand le quota du jour l'est.
 
-Limites du plan gratuit (page des limites de Groq, 14/11/2026, pour chacun des deux modèles) : 30 requêtes par minute, 1 000 requêtes par jour, 8 000 tokens par minute, 200 000 tokens par jour. Les en-têtes `x-ratelimit-*` renvoyés au compte de l'auteur sont notés dans `eval/results_v3.md`.
-
-Réglages de l'expérience, à donner sur la ligne de commande, sans changer `.env` :
+**Activer le mode distant :**
+1. créez une clé sur la console Groq et mettez-la dans `.env`, ligne `GROQ_API_KEY=…` (ce fichier est ignoré par Git ; jamais la clé ailleurs) ;
+2. pour une question : `.venv\Scripts\python scripts\ask.py --backend openai "Dois-je tenir un registre des traitements ?"` (le modèle distant est `qwen/qwen3.8-27b` par défaut : `LLM_API_MODEL`, ou `--model` pour une seule question) ;
+3. pour en faire le mode par défaut : `LLM_BACKEND=openai` dans `.env`, et rien d'autre (`LLM_MODEL` reste le modèle local, `LLM_API_REASONING_EFFORT` vide vaut `none` pour ce modèle).
 
 | Réglage | Valeur | Rôle |
 |---|---|---|
-| `LLM_BACKEND` ou `--backend` | `openai` | API compatible OpenAI au lieu d'Ollama |
+| `LLM_BACKEND` ou `--backend` | `ollama` (défaut) ou `openai` | Mode local ou distant |
+| `LLM_API_MODEL` ou `--model` (en mode distant) | `qwen/qwen3.8-27b` (défaut) | Modèle distant ; `LLM_MODEL` reste le modèle local |
 | `LLM_API_BASE_URL` | `https://api.groq.com/openai/v1` | Adresse de l'API |
-| `LLM_API_KEY_ENV` | `GROQ_API_KEY` | **Nom** de la variable de `.env` qui contient la clé (jamais la clé elle-même) |
-| `LLM_MODEL` ou `--model` | `qwen/qwen3.8-27b`, `openai/gpt-oss-120b` | Modèle distant |
-| `LLM_API_REASONING_EFFORT` ou `--reasoning-effort` | `none`, `low` | Réglage `reasoning_effort` envoyé à l'API (vide : rien d'envoyé) |
+| `LLM_API_KEY_ENV` | `GROQ_API_KEY` | **Nom** de la variable de `.env` qui contient la clé |
+| `LLM_API_REASONING_EFFORT` | vide (`none` pour qwen3.8-27b) | Réglage `reasoning_effort` envoyé à l'API ; l'option `--reasoning-effort` n'existe que dans `answer_questions.py` et `check_api.py`, pas dans `ask.py` |
 
-```powershell
-.venv\Scripts\python scripts\check_api.py --model qwen/qwen3.8-27b --reasoning-effort none   # un appel d'essai : modèles ouverts à la clé, limites réelles du compte
-.venv\Scripts\python scripts\answer_questions.py --backend openai --model qwen/qwen3.8-27b --reasoning-effort none --version v4_big_qwen27b
-.venv\Scripts\python scripts\answer_questions.py --backend openai --model qwen/qwen3.8-27b --reasoning-effort none --version heldout_v4_big_qwen27b --questions eval\questions_v1.jsonl
-.venv\Scripts\python scripts\compare_answers.py v4=eval\answers_v4.md,eval\answers_heldout_v4.md qwen27b=eval\answers_v4_big_qwen27b.md,eval\answers_heldout_v4_big_qwen27b.md
-```
-
-La clé se met seulement dans `.env`, qui est ignoré par Git. Avant chaque commit, `scripts\scan_secrets.py` vérifie qu'aucune clé n'est sur le point d'être publiée (un crochet Git local, non versionné, le lance automatiquement). Quand l'API impose une limite de débit, le copilote attend le délai demandé, puis réessaie ; ce temps d'attente n'est pas compté dans les mesures. Si le quota du jour est atteint, la série s'arrête proprement : le fichier de réponses garde ce qui est fait, et `--resume` reprend les questions manquantes. Avec `gpt-oss-120b`, le raisonnement du modèle compte dans la limite de 2 000 tokens : une réponse coupée pour cette raison est signalée, avec la taille du raisonnement.
+`scripts\check_api.py` fait un appel d'essai avec `LLM_API_MODEL` (ou `--model`) et affiche les modèles ouverts à votre clé et les limites réelles de votre compte. Avant chaque commit, `scripts\scan_secrets.py` vérifie qu'aucune clé n'est sur le point d'être publiée. Les fichiers de réponses de l'expérience (`eval/answers_*_big_*.md`) et sa comparaison (`scripts\compare_answers.py`) restent dans le dépôt.
 
 ## Sources juridiques
 

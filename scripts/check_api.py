@@ -46,12 +46,12 @@ def describe_limits(rate_limits: dict[str, str]) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Un appel d'essai à l'API compatible OpenAI : modèles ouverts, limites du compte.")
-    parser.add_argument("--model", help="modèle distant à essayer (par défaut : LLM_MODEL)")
+    parser.add_argument("--model", help="modèle distant à essayer (par défaut : LLM_API_MODEL)")
     parser.add_argument("--reasoning-effort",
                         help="valeur de reasoning_effort à envoyer, par exemple none ou low (par défaut : LLM_API_REASONING_EFFORT)")
     args = parser.parse_args()
     settings = load_settings()
-    model = args.model or settings.llm_model
+    model = args.model or settings.llm_api_model
     effort = settings.llm_api_reasoning_effort if args.reasoning_effort is None else args.reasoning_effort.strip().lower()
     chat_model = OpenAICompatibleChatModel(
         settings.llm_api_base_url, model, settings.llm_api_key_env, num_ctx=settings.llm_num_ctx,
