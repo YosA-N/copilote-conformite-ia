@@ -253,9 +253,28 @@ Question complète q02 (recherche, génération, juge) : **49,2 s sans reranker*
 
 **Coût du reranker sur secteur : 22 à 33 s de plus par question** (la recherche passe de 2 s à environ 27 à 33 s), plus 15 s de chargement du modèle au premier appel. Avec la génération et le juge (39 s médian en v4), une question locale passerait vers 65 s.
 
-### 7.6 Décision : en attente de la relecture de l'auteur
+### 7.6 Relecture de l'auteur et décision : reranker gardé comme option désactivée
 
-- Première partie de la règle (recherche) : **remplie**.
-- Seconde partie (aucune réponse dangereuse créée en local) : **à juger par l'auteur** sur les deux fichiers ci-dessus.
-- Coût, mesuré sur secteur : 22 à 33 s de plus par question (une question locale vers 65 s au lieu de 39 s médian), 15 s de chargement au premier appel, 2,3 Go de modèle et environ 1 Go de bibliothèques.
-- Si retenu : dépendance optionnelle `pip install -e .[rerank]` dans `pyproject.toml`, versions épinglées, README. Sinon : désinstallation de `torch` et `transformers`, et statut « mesuré, non retenu » ici. Dans les deux cas, `SEARCH_RERANK=off` reste la valeur par défaut jusqu'à la décision.
+Relectures de l'auteur, enregistrées telles quelles : `eval/reviews/v4_rerank.jsonl` et `eval/reviews/heldout_v4_rerank.jsonl` (`review_summary.py --check` : 13 relectures cohérentes).
+
+| 32 questions, modèle local | Juste | Partiel | Faux | Dangereux |
+|---|---|---|---|---|
+| v4 (`v4` + `heldout_v4`) | 17 | 5 | 4 | 6 |
+| v4 + reranker (`v4_rerank` + `heldout_v4_rerank`) | 17 | 6 | 4 | **5** |
+
+Réponses dangereuses, question par question :
+
+| | v4 | v4 + reranker |
+|---|---|---|
+| Corrigées | | q01 et q07 deviennent justes ; q18 devient une abstention (faux, sans danger) |
+| Inchangées | q14, q16, q26 | q14, q16, q26 |
+| **Créées** | | **q09** (haut risque rendu conditionnel alors que l'annexe III, point 4, a vise expressément le filtrage des candidatures ; art. 26 sorti des passages) et **q10** (art. 50, § 4 généralisé à tout contenu généré ; obligation du fournisseur de l'art. 50, § 1 attribuée au déployeur) |
+
+**Décision de l'auteur (17/11/2026)** :
+
+1. La recherche est nettement meilleure (v0 hit@1 7 → 10/10, v1 hit@5 16 → 17/17), mais **la règle « aucune réponse dangereuse créée en mode local » n'est pas remplie** : q09 et q10 deviennent dangereuses. Bilan local : 17/6/4/5 contre 17/5/4/6.
+2. **La cause est la rédaction du modèle local avec les nouveaux passages, pas la recherche** : pour q09, la phrase de l'annexe III, point 4, a est recopiée dans les extraits et la réponse la rend quand même conditionnelle ; pour q10, l'art. 4 est en tête et la réponse généralise un autre passage.
+3. **Reranker gardé comme option désactivée** : `SEARCH_RERANK=off` par défaut ; dépendance optionnelle dans `pyproject.toml` (`pip install -e .[rerank]`, `torch==2.15.0` et `transformers==5.23.0`) ; `requirements.txt` inchangé ; README avec le coût (22 à 33 s de plus par question, 2,3 Go de modèle) et ce bilan.
+4. **Piste notée, non faite** : mesurer le reranker avec le modèle distant (`qwen/qwen3.8-27b`) sur les 32 questions, puisque la cause est la rédaction du petit modèle local.
+
+Coût, mesuré sur secteur : 22 à 33 s de plus par question (une question locale vers 65 s au lieu de 39 s médian), 15 s de chargement au premier appel, 2,3 Go de modèle et environ 1 Go de bibliothèques.

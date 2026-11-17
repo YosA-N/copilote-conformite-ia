@@ -3,6 +3,7 @@ reranker is given, the candidates of the search are reordered by its scores befo
 
 import subprocess
 import sys
+from pathlib import Path
 
 from conftest import FakeEmbedder
 
@@ -63,3 +64,31 @@ def test_missing_torch_gives_a_clear_error(monkeypatch):
         assert "torch" in str(error) and "pip install -e .[rerank]" in str(error) and "SEARCH_RERANK=off" in str(error)
     else:
         raise AssertionError("RerankerError expected")
+
+
+def test_the_copilot_and_its_scripts_work_when_torch_is_not_installed():
+    """torch and transformers made impossible to import, as on a machine installed with requirements.txt only."""
+    code = """
+import importlib.util, sys
+from dataclasses import replace
+from pathlib import Path
+sys.modules['torch'] = None
+sys.modules['transformers'] = None
+from compliance_copilot.config import Settings
+from compliance_copilot import index, rag
+from compliance_copilot.rerank import RerankerError, make_reranker
+for name in ('ask', 'search', 'answer_questions', 'compare_retrieval'):
+    spec = importlib.util.spec_from_file_location(name, Path('scripts') / f'{name}.py')
+    spec.loader.exec_module(importlib.util.module_from_spec(spec))
+settings = Settings(ollama_base_url='', llm_model='m', embedding_model='e')
+assert make_reranker(settings) is None
+try:
+    make_reranker(replace(settings, search_rerank=True)).score('q', ['t'])
+except RerankerError as error:
+    assert 'pip install -e .[rerank]' in str(error) and 'SEARCH_RERANK=off' in str(error)
+    print('OK')
+"""
+    root = Path(__file__).resolve().parents[1]
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=root)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip().endswith("OK")
