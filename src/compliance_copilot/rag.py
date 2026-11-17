@@ -12,7 +12,7 @@ import re
 import time
 import unicodedata
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from compliance_copilot.embeddings import Embedder
@@ -51,7 +51,8 @@ Règles à respecter :
 8. Ne concluez jamais qu'il n'y a « aucune obligation » ou que quelque chose « ne s'applique pas » parce que les passages n'en parlent pas : écrivez plutôt « les passages trouvés ne traitent pas de ce point ». N'affirmez une absence d'obligation que si un extrait le dit explicitement.
 9. Répondez à chaque partie de la question (par exemple « qui », « quoi » et « quand »), avec chaque passage utile et pas seulement le premier. Quand les extraits ne donnent qu'un principe général (par exemple, une durée de conservation « pas plus longue que nécessaire »), dites-le et précisez que les règles concrètes (durées, montants, modalités) peuvent venir d'autres textes, comme le droit national ou les recommandations de la CNIL.
 10. Vouvoyez toujours la personne : jamais « tu », « toi », « ton », « ta », « tes ». Écrivez en français simple, pour une personne qui n'est pas juriste. Commencez par la réponse directe en une ou deux phrases, puis expliquez brièvement.
-11. Ne donnez aucun conseil qui ne figure pas dans les extraits."""
+11. Ne donnez aucun conseil qui ne figure pas dans les extraits.
+12. Transferts hors de l'Union : n'affirmez jamais qu'un pays tiers a ou n'a pas de décision d'adéquation, ni qu'il assure ou n'assure pas un niveau de protection adéquat, car la liste des décisions en vigueur ne figure pas dans les passages. Expliquez plutôt la règle à partir des extraits (transfert possible sur la base d'une décision d'adéquation, RGPD, article 45, ou, à défaut, de garanties appropriées, RGPD, article 46), puis indiquez que la liste des pays reconnus est publiée par la Commission européenne."""
 
 REFUSAL = "Les textes trouvés ne permettent pas de répondre à cette question."
 ABSTENTION = "Les passages trouvés ne traitent pas directement de votre question."
@@ -60,6 +61,14 @@ ABSTENTION = "Les passages trouvés ne traitent pas directement de votre questio
 JUDGE_PROMPT = """Vous contrôlez le travail d'un assistant qui répond aux questions sur le RGPD et l'AI Act à partir d'extraits de ces textes.
 On vous donne une question et les extraits retenus par l'assistant. Ces extraits répondent-ils DIRECTEMENT à la question posée, c'est-à-dire qu'ils traitent de la situation précise de la question, et pas seulement d'un sujet voisin ?
 Répondez par un seul mot : OUI ou NON."""
+# Session 7 bis: the adequacy decisions are not in the corpus, so the copilot cannot know which third countries have one.
+# The code adds this note under any answer that cites RGPD articles 44 to 49 (transfers to third countries).
+ADEQUACY_DECISIONS_URL = "https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/adequacy-decisions_en"
+ADEQUACY_NOTE = (
+    "La liste des pays bénéficiant d'une décision d'adéquation n'est pas dans les textes utilisés par le copilote : "
+    f"consultez la page de la Commission européenne sur les décisions d'adéquation (en anglais) : {ADEQUACY_DECISIONS_URL}"
+)
+TRANSFER_ARTICLES = range(44, 50)  # RGPD, chapter V: articles 44 to 49
 DISCLAIMER = (
     "Information, pas un conseil juridique : vérifiez les textes officiels cités et, en cas de doute, "
     "demandez l'avis d'un professionnel ou de la CNIL."
@@ -168,6 +177,7 @@ class RagAnswer:
     judgment: bool | None = None  # OUI → True, NON → False, unclear or not asked → None
     judge_seconds: float = 0.0
     wait_seconds: float = 0.0  # time spent waiting for the rate limits of an API, not counted in the times above
+    notes: list[str] = field(default_factory=list)  # fixed notes added by the code (not by the model) under the answer
 
     @property
     def verified_extracts(self) -> list[Extract]:
@@ -404,6 +414,26 @@ def build_sources(passages: list[SearchResult], cited: list[int]) -> list[Source
         )
         for number, passage in enumerate(passages, start=1)
     ]
+
+
+def cites_transfer_articles(passages: list[SearchResult], cited: list[int]) -> bool:
+    """True when a cited passage comes from RGPD articles 44 to 49 (transfers of data to third countries)."""
+    for number in cited:
+        if not 1 <= number <= len(passages):
+            continue
+        metadata = passages[number - 1].metadata
+        if metadata.get("regulation") == "RGPD" and metadata.get("unit_type") == "article":
+            try:
+                if int(metadata.get("number", "")) in TRANSFER_ARTICLES:
+                    return True
+            except ValueError:
+                continue
+    return False
+
+
+def fixed_notes(passages: list[SearchResult], cited: list[int]) -> list[str]:
+    """The notes the code adds under an answer, whatever the model wrote."""
+    return [ADEQUACY_NOTE] if cites_transfer_articles(passages, cited) else []
 
 
 # ---------------------------------------------------------------- checks of the answer text
@@ -834,6 +864,7 @@ def answer_from_passages(
         judgment=judgment,
         judge_seconds=judge_seconds,
         wait_seconds=getattr(chat_model, "waited_seconds", 0.0) - waited_before,
+        notes=fixed_notes(passages, cited),
     )
 
 
@@ -857,6 +888,8 @@ def render_footer(answer: RagAnswer) -> str:
         lines.append("Passages consultés mais non cités :")
         for source in others:
             lines += [f"  [{source.number}] {source.label}", f"      {source.url}"]
+    for note in answer.notes:
+        lines.append(f"Note : {note}")
     for warning in answer.warnings:
         lines.append(f"Attention : {warning}")
     lines += ["", DISCLAIMER]

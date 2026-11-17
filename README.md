@@ -141,6 +141,7 @@ Ces chiffres portent sur les 12 questions qui ont servi à régler le système :
   - les fiches CNIL, prévues mais pas encore intégrées.
 
   Les durées, montants et modalités concrètes viennent souvent de ces autres textes.
+- **Décisions d'adéquation absentes** : le corpus ne contient pas les décisions de la Commission européenne qui reconnaissent qu'un pays hors de l'Union protège suffisamment les données. Le copilote ne peut donc pas dire si un pays donné en bénéficie : il explique la règle (RGPD, articles 45 et 46) et, dès qu'une réponse cite les articles 44 à 49, le code ajoute un renvoi vers [la page de la Commission européenne sur les décisions d'adéquation](https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/adequacy-decisions_en) (en anglais).
 - **Recherche imparfaite** : le passage utile n'est pas toujours parmi les 5 retenus. Par exemple, l'art. 32 (sécurité) n'est pas trouvé pour une des questions de test.
 - **Lenteur** : comptez environ 40 secondes par réponse (contrôle de pertinence compris) avec une carte graphique de 4 Go ; les questions à longue liste dépassent la minute. C'est davantage sans carte graphique.
 - **Sur-apprentissage** : le système a été réglé sur les questions de test. Sur des questions qu'il n'avait jamais vues, la version de la séance 5 ter n'avait que 6 réponses justes sur 20, dont 4 dangereuses (`eval/results_v2.md`). Seul l'examen final, mis de côté, mesurera honnêtement la version actuelle.
