@@ -26,6 +26,7 @@ from compliance_copilot.evaluation import describe_reference, first_hit_rank, lo
 from compliance_copilot.index import IndexNotReadyError
 from compliance_copilot.llm import LLMError, make_chat_model
 from compliance_copilot.rag import ABSTENTION, RagAnswer, answer_question, render_footer
+from compliance_copilot.rerank import make_reranker
 from compliance_copilot.sources import SOURCES
 
 QUESTION_FILES = [EVAL_DIR / "questions_v0.jsonl", EVAL_DIR / "questions_offtopic_v0.jsonl"]
@@ -177,7 +178,9 @@ def header(settings: Settings, version: str, question_sets: list, summary: list[
         f"- Recherche : `{settings.embedding_model}` (sur {settings.query_embedding_device.upper()}), mode « {settings.search_mode} », "
         f"lexique « {settings.search_lexicon} », {settings.search_k} passages par question, "
         + (f"{settings.search_max_per_article} au plus par article" if settings.search_max_per_article else "sans limite par article")
-        + (", 1er paragraphe ajouté quand un paragraphe suivant d'un article découpé est retenu" if settings.search_first_paragraph else ""),
+        + (", 1er paragraphe ajouté quand un paragraphe suivant d'un article découpé est retenu" if settings.search_first_paragraph else "")
+        + (f", reranker `{settings.reranker_model}` sur CPU ({settings.search_rerank_candidates} candidats reclassés avant la limite par article)"
+           if settings.search_rerank else ""),
         "- Contrôle de pertinence (juge) : "
         + ("activé ; si le modèle juge que les extraits ne répondent pas directement à la question, la réponse est remplacée par "
            f"« {ABSTENTION} »" if settings.answer_judge else "désactivé"),
@@ -221,6 +224,7 @@ def main() -> int:
               "aucune donnée personnelle.", flush=True)
     embedder = make_embedder(settings, settings.query_embedding_device)
     chat_model = make_chat_model(settings)
+    reranker = make_reranker(settings)
     question_sets = [(path, load_questions(path)) for path in args.questions]
     questions = [question for _, loaded in question_sets for question in loaded]
 
@@ -245,6 +249,7 @@ def main() -> int:
                 question.question, INDEX_DIR, embedder, chat_model, k=settings.search_k, mode=settings.search_mode,
                 lexicon=settings.search_lexicon, max_per_article=settings.search_max_per_article, judge=settings.answer_judge,
                 first_paragraph=settings.search_first_paragraph,
+                reranker=reranker, rerank_candidates=settings.search_rerank_candidates,
             )
         except (IndexNotReadyError, EmbeddingError, LLMError) as error:
             print(f"[ERREUR] {error}")

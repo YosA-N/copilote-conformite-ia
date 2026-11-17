@@ -49,6 +49,7 @@ class SearchResult:
     id: str
     text: str
     metadata: dict
+    rerank_score: float | None = None  # score of the optional reranker, when it reordered the candidates
 
 
 def load_chunks(path: Path) -> list[dict]:
@@ -205,6 +206,8 @@ def search(
     lexicon: str = "off",
     max_per_article: int | None = None,
     first_paragraph: bool = False,
+    reranker=None,
+    rerank_candidates: int = 20,
 ) -> list[SearchResult]:
     """The k chunks closest to the question, best first.
 
@@ -212,7 +215,9 @@ def search(
     rankings (RRF). lexicon "keywords" adds legal wording to the keyword query, "all" to both
     queries. max_per_article keeps at most that many chunks of the same article; first_paragraph
     adds the first paragraph of an article when a later one is kept (see with_first_paragraphs).
-    The score is always the cosine similarity between the question and the chunk.
+    The score is always the cosine similarity between the question and the chunk. With a reranker
+    (compliance_copilot.rerank), the rerank_candidates best chunks of the vector search are reordered by its
+    scores (kept in rerank_score) before the per-article limit and the first paragraphs.
     """
     if mode not in SEARCH_MODES or lexicon not in LEXICON_TARGETS:
         raise ValueError(f"mode doit valoir {SEARCH_MODES} et lexicon {LEXICON_TARGETS}")
@@ -228,11 +233,20 @@ def search(
     vector = embedder.embed([expanded if lexicon == "all" else question])[0]
     collection = open_collection(index_dir)
 
+    rerank_scores: dict[str, float] = {}
     if mode == "vector":
         candidates = k * 4 if max_per_article else k  # room to skip the extra chunks of an article
+        if reranker is not None:
+            candidates = max(candidates, rerank_candidates)
         found = collection.query(query_embeddings=[vector], n_results=candidates, include=["distances"])
         ranked = found["ids"][0]
         distances = dict(zip(ranked, found["distances"][0]))
+        if reranker is not None:
+            head = ranked[:rerank_candidates]
+            texts = collection.get(ids=head, include=["documents"])
+            by_id = dict(zip(texts["ids"], texts["documents"]))
+            rerank_scores = dict(zip(head, reranker.score(expanded if lexicon == "all" else question, [by_id[i] for i in head])))
+            ranked = sorted(head, key=lambda i: rerank_scores[i], reverse=True) + ranked[rerank_candidates:]
     else:
         distances = {}
         by_meaning = collection.query(query_embeddings=[vector], n_results=HYBRID_CANDIDATES, include=[])["ids"][0]
@@ -251,5 +265,6 @@ def search(
             similarity = 1 - distances[chunk_id]
         else:  # fused ranking or added first paragraph: both vectors are normalised
             similarity = float(sum(a * b for a, b in zip(vector, embedding)))
-        results.append(SearchResult(rank=rank, score=similarity, id=chunk_id, text=text, metadata=metadata))
+        results.append(SearchResult(rank=rank, score=similarity, id=chunk_id, text=text, metadata=metadata,
+                                    rerank_score=rerank_scores.get(chunk_id)))
     return results

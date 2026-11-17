@@ -37,6 +37,9 @@ class Settings:
     search_max_per_article: int | None = 2  # at most 2 chunks of the same article among the passages
     search_k: int = 5  # passages given to the language model (8 measured at session 6: slower, no gain with the lexicon)
     search_first_paragraph: bool = True  # add the first paragraph of an article when a later one is kept (session 6)
+    search_rerank: bool = False  # cross-encoder reranker on the candidates (optional, needs torch: session 7 bis)
+    search_rerank_candidates: int = 20  # candidates of the vector search given to the reranker
+    reranker_model: str = "BAAI/bge-reranker-v2-m3"
     answer_judge: bool = True  # second short call: do the verified extracts answer the question directly?
     llm_backend: str = "ollama"  # "ollama" (local, the default) or "openai" (an OpenAI-compatible API: the remote mode)
     llm_api_base_url: str = DEFAULT_API_BASE_URL
@@ -78,6 +81,9 @@ def load_settings() -> Settings:
         search_max_per_article=optional_int(os.getenv("SEARCH_MAX_PER_ARTICLE", "2")),
         search_k=int(os.getenv("SEARCH_K", "5")),
         search_first_paragraph=os.getenv("SEARCH_FIRST_PARAGRAPH", "on").strip().lower() in {"on", "1", "true", "oui"},
+        search_rerank=os.getenv("SEARCH_RERANK", "off").strip().lower() in {"on", "1", "true", "oui"},
+        search_rerank_candidates=int(os.getenv("SEARCH_RERANK_CANDIDATES", "20")),
+        reranker_model=os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3").strip(),
         answer_judge=os.getenv("ANSWER_JUDGE", "on").strip().lower() in {"on", "1", "true", "oui"},
         llm_backend=os.getenv("LLM_BACKEND", "ollama").strip().lower(),
         llm_api_base_url=os.getenv("LLM_API_BASE_URL", DEFAULT_API_BASE_URL).rstrip("/"),

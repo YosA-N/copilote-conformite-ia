@@ -35,6 +35,8 @@ LEXICON: list[tuple[str, str]] = [
     # the lexicon translates words, it never gives the conclusion: emotion recognition is only forbidden at work and in education
     (r"emotion", "systèmes de reconnaissance des émotions"),
     (r"amendes?|sanctions?", "amendes administratives"),
+    # Measured and NOT kept (session 7 bis, eval/results_v4.md, section 6): « ai-je le droit » → « pratique interdite
+    # ou autorisée ». It only helped q24 and, with the local model, turned a harmless abstention into an inverted answer.
 ]
 
 

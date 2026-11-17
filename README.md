@@ -60,6 +60,24 @@ Un long article découpé en paragraphes pouvait occuper à lui seul les 5 passa
 
 `evaluate_retrieval.py` pose les 10 questions de `eval/questions_v0.jsonl` et indique, pour chacune, le rang du premier article attendu, puis le **hit@1** (l'article attendu arrive en premier) et le **hit@5** (il est dans les 5 premiers passages).
 
+### Reclassement des passages (optionnel, désactivé par défaut)
+
+Un **reranker** (**cross-encoder**) peut relire les 20 meilleurs passages trouvés et les reclasser selon leur pertinence par rapport à la question, avant de garder les 5 meilleurs. Le modèle utilisé est `BAAI/bge-reranker-v2-m3` (licence Apache-2.0), qui tourne sur le processeur.
+
+**Il est désactivé par défaut** (`SEARCH_RERANK=off`), pour deux raisons mesurées à la séance 7 bis (`eval/results_v4.md`, section 7) :
+
+- **le coût** : 22 à 33 s de plus par question (une question locale passe d'environ 39 s à environ 65 s), 2,3 Go de modèle téléchargés une fois, et environ 1 Go de bibliothèques (`torch`, `transformers`) ;
+- **le bilan avec le modèle local** : la recherche est nettement meilleure (l'article attendu arrive en premier pour 10 questions de mesure sur 10, contre 7), mais deux réponses deviennent dangereuses, alors que deux autres sont corrigées et qu'une troisième devient un refus prudent. Sur les 32 questions relues : 17 justes, 6 partielles, 4 fausses, 5 dangereuses, contre 17, 5, 4 et 6 sans reranker. La cause est la façon dont le petit modèle local rédige à partir des nouveaux passages, pas la recherche.
+
+Pour l'essayer :
+
+```powershell
+.venv\Scripts\python -m pip install -e .[rerank]   # torch et transformers (versions épinglées)
+```
+
+puis `SEARCH_RERANK=on` dans `.env`. Le copilote fonctionne normalement sans ces bibliothèques : elles ne sont chargées que si le reranker est activé.
+
+
 ## Poser une question
 
 ```powershell

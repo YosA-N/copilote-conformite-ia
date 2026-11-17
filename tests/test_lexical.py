@@ -42,6 +42,13 @@ def test_lexicon_adds_the_legal_wording_of_everyday_words():
     assert expand_query("Quel temps fait-il ?") == "Quel temps fait-il ?"
 
 
+def test_lexicon_has_no_entry_on_the_form_of_a_permission_question():
+    """Decision of the author (session 7 bis, eval/results_v4.md): « ai-je le droit » → « pratique interdite ou autorisée »
+    was measured and not kept. The form of the question adds nothing; only its words can."""
+    assert expand_query("Ai-je le droit de filmer l'entrée ?") == "Ai-je le droit de filmer l'entrée ?"
+    assert "interdite" not in expand_query("Puis-je utiliser une IA pour trier des CV ?")
+
+
 def test_hybrid_search_returns_the_best_chunks_with_their_similarity(index_dir, fake_embedder):
     results = search("désignation délégué", index_dir, fake_embedder, k=3, mode="hybrid", lexicon="keywords")
 
