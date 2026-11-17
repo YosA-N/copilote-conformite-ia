@@ -141,3 +141,53 @@ def test_the_check_names_no_country():
     source = (Path(__file__).resolve().parents[1] / "src" / "compliance_copilot" / "adequacy.py").read_text(encoding="utf-8")
     for country in ("États-Unis", "Etats-Unis", "Royaume-Uni", "Suisse", "Japon", "Canada", "Chine", "Inde", "USA", "Unis"):
         assert country not in source
+
+
+# ---------------------------------------------------------------- the consequence of a removed claim goes with it
+
+# Real sentences of q16 that draw the consequence of the claim just before them.
+CONSEQUENCE_RERANK = "Ainsi, le transfert est autorisé uniquement s’il est couvert par une garantie appropriée ou une des dérogations de l'article 49."
+CONSEQUENCE_LOCAL_1 = "Par conséquent, le transfert est possible uniquement s'il est accompagné de garanties appropriées [2]."  # answers_q16_adequacy_redact.md
+KEPT_AFTER = "Les passages trouvés ne précisent pas la liste des pays ou territoires reconnus comme adéquats."
+
+
+def test_the_consequence_right_after_a_removed_claim_is_removed_under_the_same_replacement():
+    before = "Oui, si des garanties appropriées sont prévues (RGPD, article 46) [2]."
+    for claim, consequence in ((KNOWN_DANGEROUS["heldout_v4_rerank"], CONSEQUENCE_RERANK),
+                               (KNOWN_DANGEROUS["q16_adequacy_local_3"], CONSEQUENCE_LOCAL_1)):
+        text, removed = redact_adequacy_claims(f"{before} {claim} {consequence} {KEPT_AFTER}")
+        assert text == f"{before} {REDACTED} {KEPT_AFTER}"
+        assert removed == [claim, consequence]
+
+
+def test_a_consequence_is_kept_when_nothing_was_removed_before_it_or_when_it_is_not_right_after():
+    claim = KNOWN_DANGEROUS["q16_adequacy_local_3"]
+    alone = f"Le transfert vers un pays tiers suit le chapitre V du RGPD [1]. {CONSEQUENCE_LOCAL_1}"
+    assert redact_adequacy_claims(alone) == (alone, [])
+    later = f"{claim} {KEPT_AFTER} {CONSEQUENCE_LOCAL_1}"
+    assert redact_adequacy_claims(later) == (f"{REDACTED} {KEPT_AFTER} {CONSEQUENCE_LOCAL_1}", [claim])
+
+
+def test_claim_and_consequence_are_never_shown_while_the_answer_is_written_and_the_warning_says_so():
+    passages = [passage("gdpr:art_46", "RGPD", "46", ART_46)]
+    claim = KNOWN_DANGEROUS["q16_adequacy_local_3"].replace("[2]", "[1]")
+    reply = (f"EXTRAITS :\n- [1] « {ART_46} »\n\nRÉPONSE :\nOui, si des garanties appropriées sont prévues (RGPD, article 46) [1]. "
+             f"{claim} {CONSEQUENCE_LOCAL_1.replace('[2]', '[1]')} Les personnes concernées doivent disposer de droits opposables [1].")
+
+    shown: list[str] = []
+    answer = answer_from_passages(QUESTION, passages, FakeChatModel(reply=reply), on_text=shown.append)  # 3 characters at a time
+    assert "".join(shown) == answer.text
+    assert answer.text == (f"Oui, si des garanties appropriées sont prévues (RGPD, article 46) [1]. {REDACTED} "
+                           "Les personnes concernées doivent disposer de droits opposables [1].")
+    warning = next(w for w in answer.warnings if w.startswith("Phrase retirée de la réponse"))
+    assert "Les États-Unis ne sont pas reconnus" in warning and "ainsi que 1 phrase(s) qui en tirai(en)t la conséquence" in warning
+
+
+def test_the_check_is_stable_when_run_twice_and_completes_an_answer_redacted_without_the_consequence_rule():
+    claim = KNOWN_DANGEROUS["q16_adequacy_local_3"]
+    text = f"Le transfert suit le chapitre V du RGPD [3]. {claim} {CONSEQUENCE_LOCAL_1} {KEPT_AFTER}"
+    once = redact_adequacy_claims(text)[0]
+    assert redact_adequacy_claims(once) == (once, [])  # REDACTED itself is never a claim
+    # local 1 of answers_q16_adequacy_redact.md, written before the consequence rule: the consequence after REDACTED goes too
+    older = f"Le transfert suit le chapitre V du RGPD [3]. {REDACTED} {CONSEQUENCE_LOCAL_1} {KEPT_AFTER}"
+    assert redact_adequacy_claims(older) == (once, [CONSEQUENCE_LOCAL_1])

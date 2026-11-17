@@ -346,3 +346,25 @@ Aucune autre question n'est touchée. Les trois réponses dangereuses connues so
 | Distant 3 | non | idem ; « La liste des pays reconnus… est publiée par la Commission européenne » |
 
 La note fixe est présente sous les 6 réponses. **Limite vue sur le 1er essai local** : le contrôle retire une phrase, pas le raisonnement qui en découle ; une conclusion tirée de la phrase retirée (« par conséquent… uniquement… garanties appropriées ») reste affichée.
+
+### 8.6 Extension demandée par l'auteur : la phrase de conséquence part avec la phrase retirée
+
+**Pourquoi** : dans le 1er essai local de 8.5, la phrase retirée était suivie de « Par conséquent, le transfert est possible uniquement s'il est accompagné de garanties appropriées [2] », qui en gardait la conclusion.
+
+**Règle** : quand une phrase est retirée, la phrase **immédiatement suivante** est retirée avec elle, sous le **même** texte de remplacement, si elle commence par un mot de conséquence : « par conséquent », « en conséquence », « donc », « ainsi », « dès lors », « de ce fait », « c'est pourquoi », « il en résulte », « il s'ensuit », « cela signifie / implique », « ce qui signifie / implique ». Seule la phrase suivante est concernée ; une phrase « Par conséquent… » qui ne suit pas une phrase retirée est gardée. L'alerte le dit : « …, ainsi que 1 phrase(s) qui en tirai(en)t la conséquence ».
+
+**Affichage au fil de l'écriture** : une phrase retirée est retenue jusqu'à ce que la suivante soit complète, puisqu'elle peut être sa conséquence ; le texte affiché reste identique à la réponse finale.
+
+**Stabilité** : le texte de remplacement compte comme une phrase à part, jamais signalée, et comme une phrase déjà retirée : appliquer le contrôle deux fois donne le même texte, et une réponse traitée avant cette extension (8.5, local 1) perd aussi sa phrase de conséquence.
+
+**Tests** (`tests/test_adequacy.py`, 12 tests) : les deux vraies phrases de conséquence de q16 (« Ainsi, le transfert est autorisé uniquement… » du reranker, « Par conséquent… » du 1er essai local) partent avec leur affirmation ; une conséquence qui ne suit pas une phrase retirée est gardée ; affichage au fil de l'écriture identique ; contrôle stable appliqué deux fois.
+
+**Rejoué sur toutes les réponses enregistrées** (sans régénérer) : 6 affirmations retirées (inchangé) et **3 phrases de conséquence** en plus, toutes dans q16 :
+
+| Fichier | Phrase de conséquence retirée |
+|---|---|
+| `answers_heldout_v4.md` | « Ainsi, le transfert ne peut avoir lieu que si des garanties appropriées sont mises en place, notamment par des clauses contractuelles… » |
+| `answers_heldout_v4_rerank.md` | « Ainsi, le transfert est autorisé uniquement s'il est couvert par une garantie appropriée ou une des dérogations de l'article 49. » |
+| `answers_q16_adequacy_redact.md`, local 1 | « Par conséquent, le transfert est possible uniquement s'il est accompagné de garanties appropriées [2]. » |
+
+Les trois tiraient la conclusion « pas de décision d'adéquation, donc seulement des garanties appropriées » ; aucune autre question n'est touchée. Les fichiers de réponses ne sont pas régénérés ni retouchés.

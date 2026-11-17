@@ -26,6 +26,7 @@ from compliance_copilot.adequacy import (  # noqa: F401 (ADEQUACY_* and cites_tr
     SentenceRedactor,
     cites_transfer_articles,
     fixed_notes,
+    is_consequence,
     redact_adequacy_claims,
 )
 from compliance_copilot.privacy import refuse_personal_data
@@ -834,9 +835,12 @@ def answer_from_passages(
     elif judge and not refused and judgment is None:
         warnings.append("Le contrôle de pertinence n'a pas répondu clairement (OUI ou NON) : la réponse est affichée sans ce contrôle.")
     if removed:
+        claims = [sentence for sentence in removed if not is_consequence(sentence)]
+        consequences = len(removed) - len(claims)
         warnings.append(
             "Phrase retirée de la réponse : elle disait qu'un pays a ou n'a pas de décision d'adéquation (ou de niveau de protection "
-            f"adéquat), ce que les textes du copilote ne permettent pas de savoir : « {_short(removed[0])} »{_more(removed)}."
+            f"adéquat), ce que les textes du copilote ne permettent pas de savoir : « {_short(claims[0])} »{_more(claims)}"
+            + (f", ainsi que {consequences} phrase(s) qui en tirai(en)t la conséquence" if consequences else "") + "."
         )
     return RagAnswer(
         question=question,

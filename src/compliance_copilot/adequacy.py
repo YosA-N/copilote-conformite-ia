@@ -3,7 +3,8 @@ countries have one. No country is named in this module: the checks only look at 
 
 - fixed_notes(): the note the code adds, with the official link, under any answer that cites RGPD articles 44 to 49;
 - redact_adequacy_claims(): each sentence that asserts that a NAMED place has, or has not, an adequacy decision or
-  an adequate level of protection is replaced by REDACTED (the rest of the answer is kept), and the code warns.
+  an adequate level of protection is replaced by REDACTED (the rest of the answer is kept), and the code warns;
+  the next sentence goes with it when it draws its consequence (« Par conséquent… », « Donc… », « Ainsi… »).
 
 The sentence check is a simple signal, measured in eval/results_v4.md (section 8.4): it caught the 4 known wrong
 sentences of q16 and made 2 false alarms on prudent, correct sentences (documented in tests/test_adequacy.py).
@@ -20,7 +21,8 @@ TRANSFER_ARTICLES = range(44, 50)  # RGPD, chapter V: articles 44 to 49
 REDACTED = "[phrase retirée : le copilote ne peut pas savoir si ce pays bénéficie d'une décision d'adéquation]"
 
 # Sentences end with . ! ? followed by a space, or with a line break; « art. 45 » and « al. 2 » do not end a sentence.
-SENTENCE_END = re.compile(r"(?<=[.!?])(?<!\bart\.)(?<!\bal\.)(?<!\bp\.)\s+|\n+")
+# REDACTED ends with « d'adéquation] »: it is a sentence of its own too.
+SENTENCE_END = re.compile(r"(?<=[.!?])(?<!\bart\.)(?<!\bal\.)(?<!\bp\.)\s+|(?<=d'adéquation\])\s+|\n+")
 CITATION = re.compile(r"\[[^\[\]\n]{1,30}\]")
 LEADING_MARKS = re.compile(r"^[\s>*•-]*")
 
@@ -43,6 +45,12 @@ NOT_A_PLACE = {
     "Commission", "Union", "Conseil", "Parlement", "Comité", "Cour", "CJUE", "RGPD", "AI", "Act", "Règlement", "Data", "Privacy",
     "Framework", "Article", "Annexe", "Chapitre", "Section", "EEE", "UE", "CNIL", "État", "États", "Espace",
 }
+# the first words of a sentence that draws the consequence of the previous one
+CONSEQUENCE = re.compile(
+    r"(?:par conséquent|en conséquence|donc|ainsi|dès lors|de ce fait|c['’]est pourquoi|il en résulte|il s['’]ensuit|"
+    r"cela (?:signifie|implique)|ce qui (?:signifie|implique))\b",
+    re.IGNORECASE,
+)
 CAPITALISED = re.compile(r"\b([A-ZÉÈÀÂÎÔÛÇ][\wéèêàâîôûç]+(?:[-‑][A-ZÉÈÀÂÎÔÛÇ][\wéèêàâîôûç]+)?)")
 
 
@@ -90,23 +98,40 @@ def _sentence_spans(text: str) -> list[tuple[int, int]]:
     return [(a, b) for a, b in spans if b > a]
 
 
+def is_consequence(sentence: str) -> bool:
+    """A sentence that draws the consequence of the one before (« Par conséquent… », « Donc… », « Ainsi… »)."""
+    return bool(CONSEQUENCE.match(LEADING_MARKS.sub("", sentence)))
+
+
 def redact_adequacy_claims(text: str) -> tuple[str, list[str]]:
-    """(text with each claiming sentence replaced by REDACTED, the removed sentences). A list marker is kept."""
-    removed, pieces, last = [], [], 0
+    """(text with each claiming sentence replaced by REDACTED, the removed sentences). A list marker is kept.
+
+    The sentence right after a removed one is removed with it, under the same REDACTED, when it draws its
+    consequence (« Par conséquent, le transfert n'est possible qu'avec des garanties appropriées. »)."""
+    removed, pieces, last, after_claim = [], [], 0, False
     for start, end in _sentence_spans(text):
         sentence = text[start:end]
-        if is_country_adequacy_claim(sentence):
+        if LEADING_MARKS.sub("", sentence).strip() == REDACTED:  # already removed (the check may run twice): kept as is
+            pieces.append(text[last:end])
+            last, after_claim = end, True
+        elif is_country_adequacy_claim(sentence):
             marks = LEADING_MARKS.match(sentence).group(0)
             pieces += [text[last:start], marks, REDACTED]
             removed.append(sentence[len(marks):].strip())
-            last = end
+            last, after_claim = end, True
+        elif after_claim and is_consequence(sentence):
+            removed.append(LEADING_MARKS.sub("", sentence).strip())  # dropped with the separator before it
+            last, after_claim = end, False
+        else:
+            after_claim = False
     pieces.append(text[last:])
     return "".join(pieces), removed
 
 
 class SentenceRedactor:
     """For an answer shown while it is written: holds back each sentence until it is complete, then passes it on,
-    or REDACTED instead. The text shown is thus the same as the final answer."""
+    or REDACTED instead. A removed sentence is held until the next one is complete, since that one may be its
+    consequence. The text shown is thus the same as the final answer."""
 
     def __init__(self, write):
         self.write = write
@@ -114,11 +139,17 @@ class SentenceRedactor:
 
     def feed(self, piece: str) -> None:
         self.buffer += piece
-        complete = 0
+        cuts, start = [], 0  # (end of the separator after a complete sentence, that sentence is a claim)
         for match in SENTENCE_END.finditer(self.buffer):
             if match.end() < len(self.buffer):  # the separator is followed by text: the sentence before it is complete
-                complete = match.end()
-        if complete:
+                sentence = self.buffer[start : match.start()]
+                removed = is_country_adequacy_claim(sentence) or LEADING_MARKS.sub("", sentence).strip() == REDACTED
+                cuts.append((match.end(), removed))
+                start = match.end()
+        while cuts and cuts[-1][1]:  # never cut right after a claim: its consequence may follow
+            cuts.pop()
+        if cuts:
+            complete = cuts[-1][0]
             self.write(redact_adequacy_claims(self.buffer[:complete])[0])
             self.buffer = self.buffer[complete:]
 
