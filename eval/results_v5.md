@@ -2,6 +2,25 @@
 
 L'examen final mesure la configuration retenue sur des questions qui n'ont servi à aucun réglage : `eval/questions_v2.jsonl` (20 questions, figées au commit `65ee0c4`, ni lues ni utilisées avant cet examen) et `eval/questions_author.jsonl` (6 questions). **Il n'est pas encore lancé.**
 
+## 0. Configuration figée (écrite le 17/11/2026, avant tout lancement)
+
+**Règle de l'examen** (décision de l'auteur) : **une seule passe**. Aucun changement du code, du prompt ou du lexique après avoir vu une réponse ou un résultat. Un problème remarqué est noté ici « observé, non corrigé », sans être corrigé.
+
+**Code** : `main` au commit `029e543` (fusion de la PR #15). La branche `eval/questions-author` (commit `93bf498` au moment du lancement) n'y ajoute que `eval/` et `CLAUDE.md` : aucune différence dans `src/` ni `scripts/` (`git diff main..HEAD` hors `eval/` et `CLAUDE.md` : vide).
+
+| Élément | Valeur |
+|---|---|
+| Recherche | `bge-m3` (Ollama, digest `790764642607`, F16) sur CPU ; mode « vector » ; lexique « all » (19 entrées, empreinte `f38616b38e27`) ; 5 passages ; 2 au plus par article ; 1er paragraphe d'un article découpé ajouté ; **reranker désactivé** (`SEARCH_RERANK=off`) |
+| Index | Chroma 1.5.9, 763 morceaux, construit le 24/10/2026 avec `bge-m3` |
+| Modèle local | `qwen3:4b-instruct` (Ollama 0.40.16, digest `0edcdef34593`, Q4_K_M), `LLM_NUM_CTX=8192`, `LLM_NUM_GPU=99`, température 0,1, 2 000 tokens au plus |
+| Modèle distant | `qwen/qwen3.8-27b` (Groq, niveau gratuit, `reasoning_effort=none` par défaut), mêmes passages, même prompt, mêmes contrôles |
+| Prompt | `SYSTEM_PROMPT` de `rag.py`, 4 339 caractères, empreinte `dba634523517` (règles 1 à 12, dont la règle 12 sur les décisions d'adéquation) |
+| Juge | `ANSWER_JUDGE=on`, `JUDGE_PROMPT` empreinte `d40a5ebc2131` |
+| Contrôles du code | vérification mot pour mot des extraits, alertes de la v4, note fixe d'adéquation (art. 44 à 49 du RGPD cités) et retrait des phrases sur l'adéquation d'un pays, avec sa phrase de conséquence |
+| Machine | Python 3.13.2 ; sur secteur à la préparation (`BatteryStatus` = 2), à revérifier avant et après chaque lot |
+
+**Déroulé prévu** : (1) recherche, `evaluate_retrieval.py --questions` sur `questions_v2.jsonl` puis `questions_author.jsonl` (hit@1, hit@5, niveaux article et paragraphe) ; (2) réponses locales, `answer_questions.py --questions … --version final_local_v2` et `final_local_author` ; (3) réponses distantes, `--backend openai`, versions `final_remote_v2` et `final_remote_author` ; (4) mesures du code (`compare_answers.py`), sans verdict.
+
 ## 1. Questions de l'auteur (`eval/questions_author.jsonl`)
 
 **Provenance : questions écrites par Claude Code à la demande de l'auteur, qui l'a choisi ; Claude Code connaissait le projet (lexique, points faibles q16 et q24) : biais possible.**
