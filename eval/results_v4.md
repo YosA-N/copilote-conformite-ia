@@ -235,15 +235,27 @@ Comme 31 questions sur 32 changent de passages, les 32 ont été régénérées 
 - **q03, q12, q13, q15, q16** : l'article attendu est cité en premier ; q16 cite aussi l'art. 49.
 - Hors sujet h01 à h05 : refusés.
 
-### 7.5 Temps : non fiables ce soir (ordinateur passé sur batterie)
+### 7.5 Temps : faussés pendant la régénération (batterie), puis remesurés sur secteur
 
 Pendant la régénération, la génération est tombée à **17 à 20 tokens/s** (contre 35 pour les fichiers v4), et le temps total médian à 86-89 s par question. Test A/B dans un même processus, même question, mêmes passages : **19 tokens/s sans `torch` importé**, 19 tokens/s avec le reranker chargé, 20 tokens/s après l'avoir libéré. Le reranker ne ralentit donc pas la génération. Cause trouvée à la fin : l'ordinateur était **sur batterie** (`BatteryStatus` = 1, carte graphique en état P8 à 300 MHz), alors qu'il était sur secteur au lancement. Le reranker lui-même a pris 70 s pour 20 passages dans cet état, contre 26 s la veille.
 
-**Le contenu des réponses n'en dépend pas** (mêmes passages, température 0,1). **Les temps des deux fichiers `*_rerank.md` ne sont pas représentatifs** : à remesurer sur secteur (essai des 3 questions de 7.1 et une question complète) avant la décision.
+**Le contenu des réponses n'en dépend pas** (mêmes passages, température 0,1). **Les temps des deux fichiers `*_rerank.md` ne sont pas représentatifs.**
+
+**Nouvelle mesure sur secteur** (17/11/2026, `BatteryStatus` = 2 vérifié avant et après, carte graphique en P0 à 1 380 MHz à la fin) :
+
+| Question | Recherche sans reranker | Avec reranker | Temps ajouté |
+|---|---|---|---|
+| q01 | 6,3 s (1re recherche, modèle de vecteurs à charger) | 28,7 s | 22,4 s |
+| q04 | 2,2 s | 26,7 s | 24,5 s |
+| q10 | 2,3 s | 27,6 s | 25,3 s |
+
+Question complète q02 (recherche, génération, juge) : **49,2 s sans reranker** (recherche 2,2 s, génération 42,5 s à 34,9 tokens/s, juge 4,5 s) et **60,2 s avec** (recherche 32,6 s, génération 25,0 s à 33,8 tokens/s, juge 2,5 s ; réponse plus courte ce coup-ci). La vitesse de génération est la même avec ou sans reranker, ce qui confirme le test A/B.
+
+**Coût du reranker sur secteur : 22 à 33 s de plus par question** (la recherche passe de 2 s à environ 27 à 33 s), plus 15 s de chargement du modèle au premier appel. Avec la génération et le juge (39 s médian en v4), une question locale passerait vers 65 s.
 
 ### 7.6 Décision : en attente de la relecture de l'auteur
 
 - Première partie de la règle (recherche) : **remplie**.
 - Seconde partie (aucune réponse dangereuse créée en local) : **à juger par l'auteur** sur les deux fichiers ci-dessus.
-- Coût : environ 26 s de plus par question sur secteur (à confirmer), 2,3 Go de modèle et environ 1 Go de bibliothèques.
+- Coût, mesuré sur secteur : 22 à 33 s de plus par question (une question locale vers 65 s au lieu de 39 s médian), 15 s de chargement au premier appel, 2,3 Go de modèle et environ 1 Go de bibliothèques.
 - Si retenu : dépendance optionnelle `pip install -e .[rerank]` dans `pyproject.toml`, versions épinglées, README. Sinon : désinstallation de `torch` et `transformers`, et statut « mesuré, non retenu » ici. Dans les deux cas, `SEARCH_RERANK=off` reste la valeur par défaut jusqu'à la décision.
