@@ -368,3 +368,28 @@ La note fixe est présente sous les 6 réponses. **Limite vue sur le 1er essai l
 | `answers_q16_adequacy_redact.md`, local 1 | « Par conséquent, le transfert est possible uniquement s'il est accompagné de garanties appropriées [2]. » |
 
 Les trois tiraient la conclusion « pas de décision d'adéquation, donc seulement des garanties appropriées » ; aucune autre question n'est touchée. Les fichiers de réponses ne sont pas régénérés ni retouchés.
+
+### 8.7 Relecture de l'auteur des 6 réponses de q16, et limite du détecteur
+
+Réponses de `eval/answers_q16_adequacy_redact.md`, **jugées comme le code actuel les afficherait** : la phrase de conséquence du 1er essai local (« Par conséquent… ») est retirée (8.6). Grille `eval/rubric.md`.
+
+| Essai | Verdict de l'auteur | Commentaire |
+|---|---|---|
+| Local 1 | partiel | règle juste, mais réponse hachée par le retrait, et la dernière phrase attribue au passage [1] un renvoi à la liste de la Commission qu'il ne contient pas |
+| Local 2 | partiel | règle juste, art. 48 mal résumé, sans risque |
+| Local 3 | juste | |
+| Distant 1 | juste | |
+| Distant 2 | juste | |
+| Distant 3 | juste | |
+
+**Bilan : 0 réponse dangereuse sur 6** (4 justes, 2 partielles), alors que q16 était dangereuse dans presque toutes les versions précédentes (`heldout_v4`, `heldout_v4_big_gptoss`, `heldout_v4_rerank`).
+
+**Trois filets, dans cet ordre** :
+
+1. **la règle 12 du prompt** : le modèle ne doit pas dire si un pays a une décision d'adéquation ; respectée 3 fois sur 3 en distant et 2 fois sur 3 en local (8.3) ;
+2. **la note fixe du code**, avec le lien officiel, sous toute réponse qui cite les art. 44 à 49 du RGPD : elle ne dépend pas du modèle ;
+3. **le retrait de phrase** (8.5 et 8.6), dernier filet pour ce que le modèle écrit malgré la règle.
+
+**Limite du détecteur** : il ne comprend pas le sens. Il repère un **lieu par sa majuscule** (un mot à majuscule qui n'est ni le premier mot de la phrase ni une institution ou un texte de la liste : Commission, Union, RGPD, « États membres »…). C'est une heuristique : un pays écrit sans majuscule, ou désigné autrement (« ce pays », « là-bas », le nom d'une ville ou d'un hébergeur à la place du pays), passe sans être vu ; un nom propre qui n'est pas un lieu peut au contraire faire signaler une phrase. Il se trompe aussi sur des phrases prudentes et justes (2 fausses alertes documentées dans `tests/test_adequacy.py`), et un retrait peut laisser une réponse hachée (local 1). C'est pourquoi il vient en troisième, après la règle du prompt et la note fixe, et ne remplace pas la relecture humaine.
+
+**La séance 7 bis est terminée** : q24 (diagnostic, entrée de lexique mesurée non retenue, reranker gardé comme option désactivée) et q16 (règle, note fixe, retrait de phrase).
