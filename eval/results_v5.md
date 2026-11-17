@@ -1,6 +1,6 @@
 # Examen final — questions_v2 et questions de l'auteur
 
-L'examen final mesure la configuration retenue sur des questions qui n'ont servi à aucun réglage : `eval/questions_v2.jsonl` (20 questions, figées au commit `65ee0c4`, ni lues ni utilisées avant cet examen) et `eval/questions_author.jsonl` (6 questions). **Il n'est pas encore lancé.**
+L'examen final mesure la configuration retenue sur des questions qui n'ont servi à aucun réglage : `eval/questions_v2.jsonl` (20 questions, figées au commit `65ee0c4`, ni lues ni utilisées avant cet examen) et `eval/questions_author.jsonl` (6 questions). **Lancé le 17/11/2026 en une seule passe (sections 2 à 5) ; relecture de l'auteur à venir : aucun verdict ici.**
 
 ## 0. Configuration figée (écrite le 17/11/2026, avant tout lancement)
 
@@ -116,3 +116,46 @@ Calcul refait pas à pas (script temporaire, mêmes fonctions que `evaluate_retr
 **Alimentation** : `BatteryStatus` = 2 (secteur) au lancement à 23:09, puis **1 (batterie)** entre les deux fichiers (23:27) et à la fin (23:37). D'après la vitesse de génération question par question, le passage sur batterie a eu lieu **vers q34** : 32 à 35 tokens/s de q28 à q33, puis 15 à 26 tokens/s de q34 à h08, et 5,5 à 18 tokens/s pour les questions de l'auteur (a03 : 228 s de génération).
 
 **Observé, non corrigé** (règle de l'examen : une seule passe, rien n'est régénéré) : le **contenu** des réponses ne dépend pas de la vitesse (mêmes passages, même modèle, température 0,1) ; les **temps** de q34 à h08 et de toutes les questions de l'auteur ne sont pas représentatifs. Les 5 recherches de vérification de la section 2.1 ont tourné pendant ce lot, vers q41-q42, après la baisse de vitesse : elles n'en sont pas la cause.
+
+## 4. Réponses distantes (`qwen/qwen3.8-27b`, Groq), sans retouche
+
+`eval/answers_final_remote_v2.md` (20 questions) et `eval/answers_final_remote_author.md` (6 questions), produites le 17/11/2026 entre 23:41 et 23:51 par `answer_questions.py --backend openai --questions … --version final_remote_v2` puis `final_remote_author` (modèle `LLM_API_MODEL` par défaut, `reasoning_effort=none`). **Sur secteur du début à la fin** (`BatteryStatus` = 2 avant, entre les deux fichiers et après ; l'attente a démarré sur batterie et le lot n'a été lancé qu'une fois le secteur détecté). Aucun arrêt par quota. Seules les questions d'examen et des extraits de loi ont été envoyés à l'API.
+
+## 5. Mesures du code (`compare_answers.py`), sans verdict
+
+| Série | Questions | Réponses données | Abstentions du juge | Refus (aucun extrait vérifié) | Hors sujet refusés | Extraits vérifiés / recopiés | Réponses avec alerte | Mots (médiane) | Total par question : médian · max |
+|---|---|---|---|---|---|---|---|---|---|
+| local, v2 | 17 + 3 hors sujet | 9 / 17 | 8 | 0 | 3 / 3 | 49 / 50 | 11 / 20 | 101 | 47 s · 111 s (*) |
+| distant, v2 | 17 + 3 hors sujet | 11 / 17 | 2 | 4 | 3 / 3 | 52 / 54 | 4 / 20 | 138 | 4 s · 5 s (+ 411 s d'attente des limites sur 15 questions, non comptée) |
+| local, auteur | 5 + 1 hors sujet | 2 / 5 | 3 | 0 | 1 / 1 | 18 / 19 | 4 / 6 | 130 | 100 s · 248 s (*) |
+| distant, auteur | 5 + 1 hors sujet | 0 / 5 | 4 | 1 | 1 / 1 | 14 / 14 | 4 / 6 | — | 4 s · 4 s (+ 135 s d'attente sur 4 questions) |
+
+(*) Temps faussés à partir de q34 et pour toutes les questions de l'auteur (passage sur batterie, section 3).
+
+Aucune réponse coupée. **Note fixe d'adéquation : 0** (aucune réponse ne cite les art. 44 à 49 du RGPD) ; **phrase retirée : 0**.
+
+Alertes du code, par type (nombre de réponses) :
+
+| Alerte | local v2 | distant v2 | local auteur | distant auteur |
+|---|---|---|---|---|
+| Contrôle de pertinence (abstention du juge) | 8 | 2 | 3 | 4 |
+| Texte entre « » introuvable dans les extraits vérifiés | 1 | 2 | 0 | 0 |
+| Absence ou impossibilité affirmée sans extrait | 1 | 0 | 0 | 0 |
+| Citation [n] sans extrait vérifié | 1 | 0 | 0 | 0 |
+| Obligation d'un autre acteur | 0 | 0 | 1 | 0 |
+| Extrait introuvable mot pour mot | 0 | 1 | 0 | 0 |
+
+**Ce que la réponse affichée a fait, selon que l'article attendu était ou non parmi les 5 passages** (lecture des fichiers, pas un verdict) :
+
+| | Article attendu dans les passages | Article attendu absent des passages |
+|---|---|---|
+| local, v2 | 10 questions : 7 réponses (q28, q31, q32, q35, q39, q40, q43), **3 abstentions** (q30, q33, q41) | 7 questions : 5 abstentions (q29, q34, q37, q38, q42), **2 réponses** (q36, q44) |
+| distant, v2 | 10 questions : **10 réponses** | 7 questions : 2 abstentions (q29, q42), 4 refus (q34, q37, q38, q44), **1 réponse** (q36) |
+| local, auteur | 0 question | 5 questions : 3 abstentions, **2 réponses** (a04, a05) |
+| distant, auteur | 0 question | 5 questions : 4 abstentions, 1 refus |
+
+**Observé, non corrigé** (règle de l'examen) :
+
+- **Le juge local s'abstient alors que l'article attendu est dans les passages** pour q30 (art. 22, passage [1]), q33 (art. 14, passage [2]) et q41 (annexe III, point 3, passage [1]) ; le modèle distant répond à ces trois questions. Même limite que celle vue à la séance 7 bis (juge local instable, `results_v4.md`, section 2.3).
+- **Réponses données sans l'article attendu** : en local q36, q44, a04 et a05 ; en distant q36. Ce sont les cas à risque à regarder en premier dans la relecture.
+- Le modèle distant ne répond à aucune des 5 questions de l'auteur (4 abstentions, 1 refus) : la recherche ne lui a fourni l'article attendu pour aucune (section 2).
