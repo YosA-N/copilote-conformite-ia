@@ -323,3 +323,26 @@ Rejouée sur les 13 fichiers et les 6 nouvelles réponses :
 | 6 nouvelles réponses q16 | 2 (local 3) | 1 : « Les États-Unis ne sont pas reconnus… » | 1 : « La décision de la Commission… n'est pas mentionnée dans les extraits, donc la situation reste incertaine » (prudente, juste) |
 
 Aucune autre question n'est touchée. Les trois réponses dangereuses connues sont toutes attrapées ; les deux réponses q16 partielles (`heldout_v3`, `heldout_v4_big_qwen27b`) ne le sont pas.
+
+### 8.5 Décision de l'auteur et mise en œuvre du contrôle (c)
+
+**Décision** : retirer **seulement** la phrase signalée, la remplacer par « [phrase retirée : le copilote ne peut pas savoir si ce pays bénéficie d'une décision d'adéquation] » et ajouter une alerte ; ne jamais remplacer toute la réponse.
+
+**Code** : `src/compliance_copilot/adequacy.py` (aucun nom de pays ; la note et le lien y ont été déplacés aussi) : `is_country_adequacy_claim` (la détection de 8.4), `redact_adequacy_claims` (remplace chaque phrase signalée, garde les puces de liste et le reste de la réponse) et `SentenceRedactor`, qui fait passer l'affichage au fil de l'écriture (juge désactivé) phrase par phrase : la phrase n'est jamais affichée, même un instant. `answer_from_passages` applique le même retrait à la réponse finale et ajoute l'alerte « Phrase retirée de la réponse : … » avec le début de la phrase.
+
+**Tests** (`tests/test_adequacy.py`) : les 3 phrases dangereuses connues de q16 et celle du 3e essai local (8.3) sont retirées ; 8 phrases justes des réponses enregistrées restent (règle au conditionnel, « les passages ne précisent pas… », « États membres ») ; les 2 fausses alertes de 8.4 sont **documentées** comme retirées à tort, pour voir tout changement ; retrait identique en réponse finale et au fil de l'écriture ; aucun nom de pays dans `adequacy.py`.
+
+**Rejoué sur toutes les réponses enregistrées** (sans régénérer) : 6 phrases retirées, toutes dans q16 (4 vraies erreurs, 2 fausses alertes). Aucune autre question n'est touchée.
+
+**q16 régénérée 3 fois en local et 3 fois en mode distant** (17/11/2026, sur secteur ; règle 12 + note + retrait) : **`eval/answers_q16_adequacy_redact.md`**, à relire. `answers_q16_adequacy.md` (8.3, sans retrait) est gardé comme référence.
+
+| Essai | Phrase retirée | Lecture rapide de Claude, pas un verdict |
+|---|---|---|
+| Local 1 | **oui** : « Il est important de noter que les États-Unis n'ont pas de décision d'adéquation reconnue par la Commission européenne, … » | le retrait fonctionne, mais **la phrase suivante en garde la conclusion** : « Par conséquent, le transfert est possible uniquement s'il est accompagné de garanties appropriées [2] » ; la dernière phrase attribue aussi au passage [1] le renvoi à la liste de la Commission, que ce passage ne contient pas |
+| Local 2 | non | forme conditionnelle (« Si les États-Unis ont été reconnus… ») ; ajoute l'art. 48 (« ne s'applique pas à un simple stockage ») |
+| Local 3 | non | forme conditionnelle ; ajoute l'art. 48 et une phrase générale sur la CNIL |
+| Distant 1 | non | règle des art. 45 et 46 ; aucune affirmation sur les États-Unis |
+| Distant 2 | non | idem ; distingue clauses types et clauses contractuelles |
+| Distant 3 | non | idem ; « La liste des pays reconnus… est publiée par la Commission européenne » |
+
+La note fixe est présente sous les 6 réponses. **Limite vue sur le 1er essai local** : le contrôle retire une phrase, pas le raisonnement qui en découle ; une conclusion tirée de la phrase retirée (« par conséquent… uniquement… garanties appropriées ») reste affichée.

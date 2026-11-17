@@ -19,6 +19,15 @@ from compliance_copilot.embeddings import Embedder
 from compliance_copilot.index import SearchResult, search
 from compliance_copilot.lexical import tokenize
 from compliance_copilot.llm import ChatModel, Generation
+from compliance_copilot.adequacy import (  # noqa: F401 (ADEQUACY_* and cites_transfer_articles kept importable from rag)
+    ADEQUACY_DECISIONS_URL,
+    ADEQUACY_NOTE,
+    REDACTED,
+    SentenceRedactor,
+    cites_transfer_articles,
+    fixed_notes,
+    redact_adequacy_claims,
+)
 from compliance_copilot.privacy import refuse_personal_data
 
 # Written with "vous" from start to end: a prompt that says "tu" to the model makes it say "tu" to the user.
@@ -61,14 +70,6 @@ ABSTENTION = "Les passages trouvés ne traitent pas directement de votre questio
 JUDGE_PROMPT = """Vous contrôlez le travail d'un assistant qui répond aux questions sur le RGPD et l'AI Act à partir d'extraits de ces textes.
 On vous donne une question et les extraits retenus par l'assistant. Ces extraits répondent-ils DIRECTEMENT à la question posée, c'est-à-dire qu'ils traitent de la situation précise de la question, et pas seulement d'un sujet voisin ?
 Répondez par un seul mot : OUI ou NON."""
-# Session 7 bis: the adequacy decisions are not in the corpus, so the copilot cannot know which third countries have one.
-# The code adds this note under any answer that cites RGPD articles 44 to 49 (transfers to third countries).
-ADEQUACY_DECISIONS_URL = "https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/adequacy-decisions_en"
-ADEQUACY_NOTE = (
-    "La liste des pays bénéficiant d'une décision d'adéquation n'est pas dans les textes utilisés par le copilote : "
-    f"consultez la page de la Commission européenne sur les décisions d'adéquation (en anglais) : {ADEQUACY_DECISIONS_URL}"
-)
-TRANSFER_ARTICLES = range(44, 50)  # RGPD, chapter V: articles 44 to 49
 DISCLAIMER = (
     "Information, pas un conseil juridique : vérifiez les textes officiels cités et, en cas de doute, "
     "demandez l'avis d'un professionnel ou de la CNIL."
@@ -348,10 +349,11 @@ class AnswerStream:
         self.buffer = ""
         self.state = "extracts"  # then "answer" or "refused"
         self.citations = CitationStream(write)
+        self.sentences = SentenceRedactor(self.citations.feed)  # a claim about a country's adequacy is never shown
 
     def feed(self, piece: str) -> None:
         if self.state == "answer":
-            self.citations.feed(piece)
+            self.sentences.feed(piece)
             return
         if self.state == "refused":
             return
@@ -361,13 +363,14 @@ class AnswerStream:
             extracts = verify_extracts(self.buffer[: match.start()], self.passages)
             if any(extract.verified for extract in extracts):
                 self.state = "answer"
-                self.citations.feed(self.buffer[match.end() :].lstrip(" \n:*_"))
+                self.sentences.feed(self.buffer[match.end() :].lstrip(" \n:*_"))
             else:
                 self.state = "refused"
                 self.write(REFUSAL)
 
     def close(self) -> None:
         if self.state == "answer":
+            self.sentences.close()
             self.citations.close()
         elif self.state == "extracts":  # the model never started its answer
             self.write(REFUSAL)
@@ -414,26 +417,6 @@ def build_sources(passages: list[SearchResult], cited: list[int]) -> list[Source
         )
         for number, passage in enumerate(passages, start=1)
     ]
-
-
-def cites_transfer_articles(passages: list[SearchResult], cited: list[int]) -> bool:
-    """True when a cited passage comes from RGPD articles 44 to 49 (transfers of data to third countries)."""
-    for number in cited:
-        if not 1 <= number <= len(passages):
-            continue
-        metadata = passages[number - 1].metadata
-        if metadata.get("regulation") == "RGPD" and metadata.get("unit_type") == "article":
-            try:
-                if int(metadata.get("number", "")) in TRANSFER_ARTICLES:
-                    return True
-            except ValueError:
-                continue
-    return False
-
-
-def fixed_notes(passages: list[SearchResult], cited: list[int]) -> list[str]:
-    """The notes the code adds under an answer, whatever the model wrote."""
-    return [ADEQUACY_NOTE] if cites_transfer_articles(passages, cited) else []
 
 
 # ---------------------------------------------------------------- checks of the answer text
@@ -835,6 +818,9 @@ def answer_from_passages(
     if abstained:
         text = ABSTENTION
     shown = not refused and not abstained
+    removed: list[str] = []
+    if shown:  # same redaction as the streamed text (AnswerStream)
+        text, removed = redact_adequacy_claims(text)
     citations = check_citations(text, len(passages)) if shown else CitationCheck(cited=[], unknown=[])
     cited = sorted(set(citations.cited) | {extract.passage for extract in extracts if extract.verified}) if shown else []
     warnings = _warnings(
@@ -847,6 +833,11 @@ def answer_from_passages(
         )
     elif judge and not refused and judgment is None:
         warnings.append("Le contrôle de pertinence n'a pas répondu clairement (OUI ou NON) : la réponse est affichée sans ce contrôle.")
+    if removed:
+        warnings.append(
+            "Phrase retirée de la réponse : elle disait qu'un pays a ou n'a pas de décision d'adéquation (ou de niveau de protection "
+            f"adéquat), ce que les textes du copilote ne permettent pas de savoir : « {_short(removed[0])} »{_more(removed)}."
+        )
     return RagAnswer(
         question=question,
         text=text,
