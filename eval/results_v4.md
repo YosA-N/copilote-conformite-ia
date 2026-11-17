@@ -171,3 +171,79 @@ Passages trouvés (identiques aux 4 essais) : [1] art. 5, § 1, a-e · [2] art. 
 Règle de décision complétée par l'auteur : aucun recul du hit@5 sur v0 ni v1, **et aucune réponse dangereuse créée en mode local**. Le diagnostic (sections 1 à 4) et les mesures (section 6) restent tels quels.
 
 Les termes du choix initial étaient : garder l'entrée (recherche meilleure sur v0 et v1, q24 juste en mode distant, le modèle retenu de la séance 7 ; en local, réponse fausse mais signalée) ou la retirer (abstention locale sans danger, art. 5 absent en distant aussi). L'étape 2 (juge local) ne changerait rien ici : le problème local est la rédaction, pas le juge. Une piste générale pour la suite, non mesurée : quand un extrait n'est pas retrouvé dans le passage cité mais l'est mot pour mot dans un autre passage du même article, le réattribuer avec une alerte, au lieu de l'ignorer.
+
+## 7. Étape 2 : reranker (cross-encoder) sur les 20 candidats
+
+Accord de l'auteur (option A) : `torch` 2.15.0 (version CPU) et `transformers` 5.23.0 installés **dans le `.venv` seulement**, `requirements.txt` inchangé ; modèle officiel `BAAI/bge-reranker-v2-m3` (Apache-2.0, 568 millions de paramètres, 2,27 Go dans le cache Hugging Face, hors dépôt). Espace libre vérifié avant : 40,6 Go.
+
+**Principe** : la recherche actuelle (vecteurs `bge-m3` + lexique) donne ses 20 meilleurs candidats ; le reranker lit chaque paire (question avec son lexique, passage) en entier, jusqu'à 512 tokens, et note sa pertinence ; les candidats sont reclassés par cette note, **puis** viennent la limite de 2 par article et le 1er paragraphe, comme aujourd'hui. Le score affiché reste la similarité cosinus. Réglage `SEARCH_RERANK=off` par défaut ; le code (`src/compliance_copilot/rerank.py`) n'importe `torch` que s'il est activé, et un test vérifie que le copilote tourne sans `torch`.
+
+### 7.1 Premier essai : temps ajouté par question (3 questions de v0)
+
+16/11/2026 au soir, 6 fils CPU, modèle déjà chargé. Secteur vérifié dans la journée, pas au moment même de l'essai (voir 7.5).
+
+| Question | Recherche sans reranker | Avec reranker (20 candidats) | Temps ajouté |
+|---|---|---|---|
+| q01 | 2,7 s | 29,1 s | 26,4 s |
+| q04 | 2,2 s | 29,0 s | 26,8 s |
+| q10 | 2,3 s | 28,6 s | 26,4 s |
+
+Chargement du modèle : 14 s une fois par lancement (155 s au premier, téléchargement compris). **Environ 26,5 s ajoutées par question, sous le seuil de 30 s fixé par l'auteur** : la mesure a continué. Pour mémoire, une question locale coûte aujourd'hui 39 s médian (recherche, génération, juge) : le reranker la porterait vers 65 s.
+
+### 7.2 Recherche : `compare_retrieval.py --rerank --repeat 3` (3 mesures identiques)
+
+| Configuration | v0 hit@1 | v0 hit@5 | v1 hit@1 (art.) | v1 hit@5 (art.) | v1 hit@5 (§) |
+|---|---|---|---|---|---|
+| actuelle (lexique + 2 par article + 1er §) | 7/10 | 10/10 | 13/17 | 16/17 | 15/17 |
+| **+ reranker (20 → 5)** | **10/10** | 10/10 | **14/17** | **17/17** | **16/17** |
+
+Rangs qui changent (article, puis paragraphe précisé) : q03 5 → **1** ; q09 3 → **1** ; q10 5 → **1** ; q12 2 → **1** ; q24 11 → **2** (§ 2) ; q25 2 → **1** ; q18 § 2 → § **1** ; q13 1 → 2 et q15 § 1 → § 3 (reculs de rang, toujours dans les 5 passages) ; q27 inchangée (§ 4 et § 6 hors des 20 premiers). **Aucun recul du hit@5 sur v0 ni v1 : la première partie de la règle est remplie.** Contrairement à l'entrée de lexique (section 6), le gain ne vient pas d'une seule question : 7 questions montent, dont 6 hors q24.
+
+### 7.3 Ce que le hit@5 ne voit pas : les 5 passages changent pour 31 questions sur 32
+
+Seule q01 garde exactement les mêmes passages. Points à surveiller dans les réponses (lecture de Claude, pas un verdict) :
+
+- **Mieux, en apparence** : q18 reçoit l'art. 9, § 2 (les exceptions, dont le consentement et les associations), absent avant ; q10 a l'art. 4 en 1re position ; q03 a l'art. 5 en 1re position ; q24 reçoit l'art. 5, § 1, f-h, en 2e position, mais toujours derrière l'art. 50, § 3 (le mélange que le juge local rejette, section 2.3).
+- **Risques** : q09 (« Puis-je utiliser une IA pour trier des CV ? ») reçoit l'art. 5, § 1, f-h (pratiques interdites) en 2e position et perd l'art. 26 et l'art. 14 : risque d'une réponse « c'est interdit ». q08 (chatbot) perd l'art. 50, § 2 et reçoit l'art. 5, § 1, f-h et l'annexe III. q16 (hébergeur aux États-Unis) perd l'art. 44. q07 garde l'art. 35, § 1 et § 3 mais reçoit l'art. 64 et deux paragraphes de l'art. 26 de l'AI Act.
+- **Hors sujet** (h01 à h05) : passages différents, toujours sans rapport ; à vérifier que les refus tiennent.
+
+D'où l'étape suivante, demandée par l'auteur : les réponses locales régénérées pour ces questions, à relire selon `eval/rubric.md`, pour la seconde partie de la règle (aucune réponse dangereuse créée en local).
+
+### 7.4 Réponses locales avec le reranker, à relire par l'auteur
+
+Comme 31 questions sur 32 changent de passages, les 32 ont été régénérées le 17/11/2026, sans retouche, avec la configuration v4 + `SEARCH_RERANK=on` (même modèle `qwen3:4b-instruct`, même prompt, même juge) : **`eval/answers_v4_rerank.md`** (v0 + 2 hors sujet) et **`eval/answers_heldout_v4_rerank.md`** (v1). L'en-tête de chaque fichier nomme le reranker. Comparaison avec les fichiers v4 relus (`compare_answers.py`) :
+
+| | v4 | v4 + reranker |
+|---|---|---|
+| Réponses données (v0 / v1) | 10/10 · 15/17 | 10/10 · 15/17 |
+| Abstentions (v1) | 2 (q22, q24) | 2 (q18, q22) |
+| Hors sujet refusés | 5/5 | 5/5 |
+| Extraits vérifiés / recopiés | 76/83 | 89/97 |
+| Réponses avec alerte | 14/32 | 14/32 |
+| Réponses coupées | 0 | 1 (q04) |
+| Mots par réponse (médiane, v0 · v1) | 125 · 118 | 90 · 162 |
+
+**Lecture rapide de Claude, pas un verdict** (les verdicts viendront de la relecture de l'auteur, dans `eval/reviews/v4_rerank.jsonl` et `heldout_v4_rerank.jsonl`) ; « v4 » rappelle le verdict déjà donné sans reranker :
+
+- **q24** (v4 : faux, abstention) : en local, « Non, vous n'avez pas le droit…, sauf si … pour des raisons médicales ou de sécurité [2] », 5 extraits vérifiés sur 5, juge OUI, aucune alerte. Ajoute que la reconnaissance des émotions figure à l'annexe III (vrai hors travail et enseignement) et mêle une exception de l'art. 50, § 3. En mode distant : juste les deux fois, 5/5 extraits vérifiés, aucune alerte.
+- **q18** (v4 : dangereux, « Non, interdit » sans les exceptions) : devient une **abstention** du juge, alors que l'art. 9, § 2 est maintenant dans les passages : sans danger, mais « faux » selon la grille.
+- **q09** (v4 : à voir dans `reviews/v4.jsonl`) : le risque d'un « c'est interdit » ne se réalise pas : « Oui : vous pouvez…, annexe III … haut risque », mais sans les obligations de l'art. 26 (perdu des passages).
+- **q10** : art. 4 cité en premier ; ajoute l'information des travailleurs (art. 26, § 7, pour les systèmes à haut risque) et **généralise l'obligation de l'art. 50, § 4** (« Si le système génère ou manipule des contenus…, vous devez indiquer… ») au-delà des hypertrucages et des textes publiés pour informer le public.
+- **q14** (v4 : dangereux) : « à condition que ce traitement soit fondé sur une finalité licite, comme la communication d'informations pertinentes » : condition qui n'est pas dans les extraits.
+- **q26** (v4 : dangereux) : toujours la condition d'hypertrucage mal rattachée ; 3 alertes.
+- **q04** : coupée par la limite de 2 000 tokens (liste de l'art. 13 incomplète) : « partiel » selon la grille. **q19** : réponse réduite à la première phrase de la définition (16 mots au lieu de 71).
+- **q03, q12, q13, q15, q16** : l'article attendu est cité en premier ; q16 cite aussi l'art. 49.
+- Hors sujet h01 à h05 : refusés.
+
+### 7.5 Temps : non fiables ce soir (ordinateur passé sur batterie)
+
+Pendant la régénération, la génération est tombée à **17 à 20 tokens/s** (contre 35 pour les fichiers v4), et le temps total médian à 86-89 s par question. Test A/B dans un même processus, même question, mêmes passages : **19 tokens/s sans `torch` importé**, 19 tokens/s avec le reranker chargé, 20 tokens/s après l'avoir libéré. Le reranker ne ralentit donc pas la génération. Cause trouvée à la fin : l'ordinateur était **sur batterie** (`BatteryStatus` = 1, carte graphique en état P8 à 300 MHz), alors qu'il était sur secteur au lancement. Le reranker lui-même a pris 70 s pour 20 passages dans cet état, contre 26 s la veille.
+
+**Le contenu des réponses n'en dépend pas** (mêmes passages, température 0,1). **Les temps des deux fichiers `*_rerank.md` ne sont pas représentatifs** : à remesurer sur secteur (essai des 3 questions de 7.1 et une question complète) avant la décision.
+
+### 7.6 Décision : en attente de la relecture de l'auteur
+
+- Première partie de la règle (recherche) : **remplie**.
+- Seconde partie (aucune réponse dangereuse créée en local) : **à juger par l'auteur** sur les deux fichiers ci-dessus.
+- Coût : environ 26 s de plus par question sur secteur (à confirmer), 2,3 Go de modèle et environ 1 Go de bibliothèques.
+- Si retenu : dépendance optionnelle `pip install -e .[rerank]` dans `pyproject.toml`, versions épinglées, README. Sinon : désinstallation de `torch` et `transformers`, et statut « mesuré, non retenu » ici. Dans les deux cas, `SEARCH_RERANK=off` reste la valeur par défaut jusqu'à la décision.

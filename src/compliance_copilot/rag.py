@@ -739,6 +739,8 @@ def answer_question(
     max_per_article: int | None = None,
     judge: bool = False,
     first_paragraph: bool = False,
+    reranker=None,
+    rerank_candidates: int = 20,
 ) -> RagAnswer:
     """Search the closest passages, have the model quote them and answer, then check everything.
 
@@ -747,7 +749,7 @@ def answer_question(
     refuse_personal_data(question, chat_model)
     start = time.perf_counter()
     found = search(question, index_dir, embedder, k=k, mode=mode, lexicon=lexicon, max_per_article=max_per_article,
-                   first_paragraph=first_paragraph)
+                   first_paragraph=first_paragraph, reranker=reranker, rerank_candidates=rerank_candidates)
     search_seconds = time.perf_counter() - start
     passages = fit_passages(question, found, chat_model)
     return answer_from_passages(question, passages, chat_model, on_text, search_seconds, found=len(found), judge=judge)

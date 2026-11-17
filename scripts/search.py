@@ -12,6 +12,7 @@ import sys
 from compliance_copilot.config import INDEX_DIR, load_settings
 from compliance_copilot.embeddings import EmbeddingError, make_embedder
 from compliance_copilot.index import IndexNotReadyError, SearchResult, search
+from compliance_copilot.rerank import RerankerError, make_reranker
 
 EXCERPT_CHARS = 160
 
@@ -43,8 +44,9 @@ def main() -> int:
         results = search(
             question, INDEX_DIR, embedder, k=args.k or settings.search_k, mode=settings.search_mode, lexicon=settings.search_lexicon,
             max_per_article=settings.search_max_per_article, first_paragraph=settings.search_first_paragraph,
+            reranker=make_reranker(settings), rerank_candidates=settings.search_rerank_candidates,
         )
-    except (IndexNotReadyError, EmbeddingError) as error:
+    except (IndexNotReadyError, EmbeddingError, RerankerError) as error:
         print(f"[ERREUR] {error}")
         return 1
 

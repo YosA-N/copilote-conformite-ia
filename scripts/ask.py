@@ -20,6 +20,7 @@ from compliance_copilot.embeddings import EmbeddingError, make_embedder
 from compliance_copilot.index import IndexNotReadyError
 from compliance_copilot.llm import LLMError, make_chat_model, provider_name
 from compliance_copilot.privacy import PersonalDataError
+from compliance_copilot.rerank import RerankerError, make_reranker
 from compliance_copilot.rag import answer_question, passage_label, render_footer
 
 
@@ -77,12 +78,13 @@ def main() -> int:
             question, INDEX_DIR, embedder, chat_model, k=args.k or settings.search_k, on_text=write_now,
             mode=settings.search_mode, lexicon=settings.search_lexicon, max_per_article=settings.search_max_per_article,
             first_paragraph=settings.search_first_paragraph,
+            reranker=make_reranker(settings), rerank_candidates=settings.search_rerank_candidates,
             judge=settings.answer_judge,
         )
     except PersonalDataError as refusal:  # raised by the core before the search and before anything is sent
         print(f"\n[REFUS] {refusal}")
         return 2
-    except (IndexNotReadyError, EmbeddingError, LLMError) as error:
+    except (IndexNotReadyError, EmbeddingError, LLMError, RerankerError) as error:
         print(f"\n[ERREUR] {error}")
         return 1
 

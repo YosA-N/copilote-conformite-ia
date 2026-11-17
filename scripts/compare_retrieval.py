@@ -18,16 +18,33 @@ from compliance_copilot.config import EVAL_DIR, INDEX_DIR, load_settings
 from compliance_copilot.embeddings import EmbeddingError, make_embedder
 from compliance_copilot.evaluation import article_level, first_hit_rank, hit_at_k, load_questions
 from compliance_copilot.index import IndexNotReadyError, search
+from compliance_copilot.rerank import CrossEncoderReranker, RerankerError
 
 DEPTH = 20
-CONFIGS = [  # (label, mode, lexicon, at most N chunks of the same article, first paragraph of a split article added)
-    ("vecteurs seuls (départ)", "vector", "off", None, False),
-    ("vecteurs + lexique", "vector", "all", None, False),
-    ("vecteurs + lexique + 2 par article", "vector", "all", 2, False),
-    ("vecteurs + lexique + 2 par article + 1er paragraphe", "vector", "all", 2, True),
+CONFIGS = [  # (label, mode, lexicon, at most N chunks of the same article, first paragraph of a split article added, reranker)
+    ("vecteurs seuls (départ)", "vector", "off", None, False, False),
+    ("vecteurs + lexique", "vector", "all", None, False, False),
+    ("vecteurs + lexique + 2 par article", "vector", "all", 2, False, False),
+    ("vecteurs + lexique + 2 par article + 1er paragraphe", "vector", "all", 2, True, False),
 ]
+RERANK_CONFIG = ("vecteurs + lexique + reranker (20 → 5) + 2 par article + 1er paragraphe", "vector", "all", 2, True, True)
 LEVELS = [("article", True), ("paragraphe", False)]
 SETS = [("v0", "questions_v0.jsonl"), ("v1", "questions_v1.jsonl")]
+
+
+class CachedReranker:
+    """Score each (question, chunk) pair once: the cross-encoder is deterministic, only the embeddings vary."""
+
+    def __init__(self, reranker):
+        self.reranker = reranker
+        self.model = reranker.model
+        self.cache: dict[tuple[str, str], float] = {}
+
+    def score(self, question: str, texts: list[str]) -> list[float]:
+        missing = [text for text in texts if (question, text) not in self.cache]
+        for text, score in zip(missing, self.reranker.score(question, missing) if missing else []):
+            self.cache[question, text] = score
+        return [self.cache[question, text] for text in texts]
 
 
 class CachedEmbedder:
@@ -54,23 +71,27 @@ def spread(values: list) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Compare les configurations de recherche sur v0 et v1.")
     parser.add_argument("--repeat", type=int, default=1, help="nombre de mesures complètes (3 recommandé)")
+    parser.add_argument("--rerank", action="store_true", help="ajouter la configuration avec le reranker (RERANKER_MODEL, torch requis)")
     args = parser.parse_args()
     settings = load_settings()
+    configs = [*CONFIGS, RERANK_CONFIG] if args.rerank else CONFIGS
+    reranker = CachedReranker(CrossEncoderReranker(settings.reranker_model)) if args.rerank else None
     question_sets = {name: [q for q in load_questions(EVAL_DIR / file) if q.expected] for name, file in SETS}
     runs: list[dict[tuple[str, str, str], list[int | None]]] = []
     for run in range(args.repeat):
         embedder = CachedEmbedder(make_embedder(settings, settings.query_embedding_device))  # fresh vectors each run
         ranks: dict[tuple[str, str, str], list[int | None]] = {}
-        for label, mode, lexicon, limit, first_paragraph in CONFIGS:
+        for label, mode, lexicon, limit, first_paragraph, rerank in configs:
             print(f"… mesure {run + 1}/{args.repeat} : {label}", file=sys.stderr, flush=True)
             for name, questions in question_sets.items():
                 try:
                     found = [
                         [r.id for r in search(q.question, INDEX_DIR, embedder, k=DEPTH, mode=mode, lexicon=lexicon, max_per_article=limit,
-                                              first_paragraph=first_paragraph)]
+                                              first_paragraph=first_paragraph, reranker=reranker if rerank else None,
+                                              rerank_candidates=settings.search_rerank_candidates)]
                         for q in questions
                     ]
-                except (IndexNotReadyError, EmbeddingError) as error:
+                except (IndexNotReadyError, EmbeddingError, RerankerError) as error:
                     print(f"[ERREUR] {error}")
                     return 1
                 for level, by_article in LEVELS:
@@ -85,7 +106,7 @@ def main() -> int:
         header = " | ".join(f"{name} hit@1 | {name} hit@5 | {name} hit@8" for name, _ in SETS)
         print(f"| Configuration | {header} |")
         print("|---|" + "---|" * (3 * len(SETS)))
-        for label, *_ in CONFIGS:
+        for label, *_ in configs:
             cells = " | ".join(
                 " | ".join(f"{spread([hit_at_k(r[label, name, level], k) for r in runs])}/{len(question_sets[name])}" for k in (1, 5, 8))
                 for name, _ in SETS
@@ -94,12 +115,12 @@ def main() -> int:
         print()
 
     print("Rang du premier article attendu, puis du paragraphe précisé s'il diffère (— = pas dans les 20 premiers) :\n")
-    print("| Question | " + " | ".join(label for label, *_ in CONFIGS) + " |")
-    print("|---|" + "---|" * len(CONFIGS))
+    print("| Question | " + " | ".join(label for label, *_ in configs) + " |")
+    print("|---|" + "---|" * len(configs))
     for name, questions in question_sets.items():
         for index, question in enumerate(questions):
             cells = []
-            for label, *_ in CONFIGS:
+            for label, *_ in configs:
                 cell = spread([r[label, name, "article"][index] or "—" for r in runs])
                 if question.expected != article_level(question.expected):
                     cell += f" (§ {spread([r[label, name, 'paragraphe'][index] or '—' for r in runs])})"
