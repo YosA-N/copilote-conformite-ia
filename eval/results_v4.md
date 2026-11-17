@@ -278,3 +278,118 @@ Réponses dangereuses, question par question :
 4. **Piste notée, non faite** : mesurer le reranker avec le modèle distant (`qwen/qwen3.8-27b`) sur les 32 questions, puisque la cause est la rédaction du petit modèle local.
 
 Coût, mesuré sur secteur : 22 à 33 s de plus par question (une question locale vers 65 s au lieu de 39 s médian), 15 s de chargement au premier appel, 2,3 Go de modèle et environ 1 Go de bibliothèques.
+
+## 8. q16 (hébergeur hors de l'Union) : décisions d'adéquation absentes du corpus
+
+**Problème** (relectures : q16 dangereuse en `heldout_v4`, `heldout_v4_big_gptoss` et `heldout_v4_rerank`) : le modèle affirme qu'un pays tiers n'a pas de décision d'adéquation. Les décisions d'adéquation de la Commission ne sont pas dans le corpus : le copilote ne peut pas le savoir. Solution générale demandée par l'auteur, **sans ajouter de texte au corpus et sans nommer aucun pays dans le code**.
+
+### 8.1 Ce qui a été fait (branche `fix/adequacy`)
+
+- **(a) Règle 12 du prompt** (`SYSTEM_PROMPT`, `rag.py`) : ne jamais affirmer qu'un pays tiers a ou n'a pas de décision d'adéquation, ni qu'il assure ou n'assure pas un niveau de protection adéquat ; expliquer la règle (RGPD, art. 45, à défaut art. 46) ; dire que la liste des pays reconnus est publiée par la Commission européenne.
+- **(b) Note fixe ajoutée par le code**, pas par le modèle, sous toute réponse qui **cite** un passage des art. 44 à 49 du RGPD (`fixed_notes`, `RagAnswer.notes`, ligne « Note : » du pied de réponse) : « La liste des pays bénéficiant d'une décision d'adéquation n'est pas dans les textes utilisés par le copilote : consultez la page de la Commission européenne sur les décisions d'adéquation (en anglais) : https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/adequacy-decisions_en ». **Lien vérifié le 17/11/2026** : page officielle de la Commission ; elle n'existe qu'en anglais (l'adresse en `_fr` renvoie vers la version anglaise). Pas de note après un refus ou une abstention (rien n'est cité).
+- **(d) README**, « Limites connues » : décisions d'adéquation absentes du corpus.
+- Tests : `tests/test_adequacy.py` (note seulement pour les art. 44 à 49 du RGPD cités, pas pour les art. 43 et 50, l'art. 46 de l'AI Act ni une annexe ; pas après un refus ; aucun nom de pays dans le prompt ni dans la note).
+
+### 8.2 Où la note apparaît : détection rejouée sur les réponses enregistrées (sans régénérer)
+
+Sur les 13 fichiers `eval/answers_*.md` existants, la note apparaîtrait sous **5 réponses, toutes de q16** (`heldout_v3`, `heldout_v4`, `heldout_v4_big_gptoss`, `heldout_v4_big_qwen27b`, `heldout_v4_rerank`), et sous **aucune autre question**.
+
+### 8.3 q16 régénérée 3 fois en local et 3 fois en mode distant
+
+17/11/2026, sur secteur, configuration v4 (reranker désactivé) + règle 12 + note. Réponses sans retouche, pour la relecture de l'auteur : **`eval/answers_q16_adequacy.md`**. Les 6 réponses citent les art. 44 à 46 (et 48 en local) : la note est présente les 6 fois.
+
+Lecture rapide de Claude, **pas un verdict** :
+
+| Essai | La réponse dit-elle si les États-Unis ont une décision d'adéquation ? |
+|---|---|
+| Local 1 | non : « Si les États-Unis ont été reconnus… (article 45)… Si ce n'est pas le cas… garanties appropriées (article 46) » ; ajoute l'art. 48 (accord international), hors sujet |
+| Local 2 | non : même forme conditionnelle ; finit par « Les passages trouvés ne précisent pas que les États-Unis ont une décision d'adéquation en vigueur » |
+| Local 3 | **oui, à tort** : « Les États-Unis ne sont pas reconnus comme assurant un niveau de protection adéquat par une décision de la Commission, donc le transfert ne peut être effectué que sous garanties appropriées », puis se contredit (« la situation reste incertaine ») |
+| Distant 1 | non : règle des art. 45 et 46, puis « Les passages trouvés ne permettent pas de savoir si une décision d'adéquation est actuellement en vigueur pour les États-Unis ; la liste des pays reconnus est publiée par la Commission européenne » |
+| Distant 2 | non : règle des art. 45 et 46, sans renvoi à la Commission dans la réponse (la note du code le donne) |
+| Distant 3 | non : règle des art. 45 et 46 ; « La liste des pays reconnus… est publiée par la Commission européenne » |
+
+La règle du prompt suffit pour le modèle distant (3/3) ; le modèle local la respecte 2 fois sur 3.
+
+### 8.4 Contrôle (c) : essai rejoué, à décider par l'auteur avant d'être codé
+
+Détection essayée hors du code du paquet (script temporaire), sans liste de pays : une phrase est signalée si elle parle d'« adéquat » ou d'« adéquation », nomme un lieu (mot à majuscule qui n'est ni le premier mot ni un organe ou un texte : Commission, Union, RGPD…), contient une affirmation (négation « ne … pas / aucune », ou « bénéficie / dispose d'une décision », « assure un niveau de protection adéquat », « est reconnu »), et que cette affirmation n'est précédée ni d'une condition (« si », « lorsque », « à défaut »…) ni d'une formule prudente (« les passages ne permettent pas / ne précisent pas… »).
+
+Rejouée sur les 13 fichiers et les 6 nouvelles réponses :
+
+| | Phrases signalées | Vraies erreurs | Fausses alertes |
+|---|---|---|---|
+| 13 fichiers existants | 4 (toutes dans q16) | 3 : les trois q16 jugées dangereuses (`heldout_v4`, `heldout_v4_big_gptoss`, `heldout_v4_rerank`) | 1 : « Vous ne pouvez pas simplement stocker… sans vérifier une décision d'adéquation ou mettre en place des garanties appropriées » (gpt-oss, phrase juste) |
+| 6 nouvelles réponses q16 | 2 (local 3) | 1 : « Les États-Unis ne sont pas reconnus… » | 1 : « La décision de la Commission… n'est pas mentionnée dans les extraits, donc la situation reste incertaine » (prudente, juste) |
+
+Aucune autre question n'est touchée. Les trois réponses dangereuses connues sont toutes attrapées ; les deux réponses q16 partielles (`heldout_v3`, `heldout_v4_big_qwen27b`) ne le sont pas.
+
+### 8.5 Décision de l'auteur et mise en œuvre du contrôle (c)
+
+**Décision** : retirer **seulement** la phrase signalée, la remplacer par « [phrase retirée : le copilote ne peut pas savoir si ce pays bénéficie d'une décision d'adéquation] » et ajouter une alerte ; ne jamais remplacer toute la réponse.
+
+**Code** : `src/compliance_copilot/adequacy.py` (aucun nom de pays ; la note et le lien y ont été déplacés aussi) : `is_country_adequacy_claim` (la détection de 8.4), `redact_adequacy_claims` (remplace chaque phrase signalée, garde les puces de liste et le reste de la réponse) et `SentenceRedactor`, qui fait passer l'affichage au fil de l'écriture (juge désactivé) phrase par phrase : la phrase n'est jamais affichée, même un instant. `answer_from_passages` applique le même retrait à la réponse finale et ajoute l'alerte « Phrase retirée de la réponse : … » avec le début de la phrase.
+
+**Tests** (`tests/test_adequacy.py`) : les 3 phrases dangereuses connues de q16 et celle du 3e essai local (8.3) sont retirées ; 8 phrases justes des réponses enregistrées restent (règle au conditionnel, « les passages ne précisent pas… », « États membres ») ; les 2 fausses alertes de 8.4 sont **documentées** comme retirées à tort, pour voir tout changement ; retrait identique en réponse finale et au fil de l'écriture ; aucun nom de pays dans `adequacy.py`.
+
+**Rejoué sur toutes les réponses enregistrées** (sans régénérer) : 6 phrases retirées, toutes dans q16 (4 vraies erreurs, 2 fausses alertes). Aucune autre question n'est touchée.
+
+**q16 régénérée 3 fois en local et 3 fois en mode distant** (17/11/2026, sur secteur ; règle 12 + note + retrait) : **`eval/answers_q16_adequacy_redact.md`**, à relire. `answers_q16_adequacy.md` (8.3, sans retrait) est gardé comme référence.
+
+| Essai | Phrase retirée | Lecture rapide de Claude, pas un verdict |
+|---|---|---|
+| Local 1 | **oui** : « Il est important de noter que les États-Unis n'ont pas de décision d'adéquation reconnue par la Commission européenne, … » | le retrait fonctionne, mais **la phrase suivante en garde la conclusion** : « Par conséquent, le transfert est possible uniquement s'il est accompagné de garanties appropriées [2] » ; la dernière phrase attribue aussi au passage [1] le renvoi à la liste de la Commission, que ce passage ne contient pas |
+| Local 2 | non | forme conditionnelle (« Si les États-Unis ont été reconnus… ») ; ajoute l'art. 48 (« ne s'applique pas à un simple stockage ») |
+| Local 3 | non | forme conditionnelle ; ajoute l'art. 48 et une phrase générale sur la CNIL |
+| Distant 1 | non | règle des art. 45 et 46 ; aucune affirmation sur les États-Unis |
+| Distant 2 | non | idem ; distingue clauses types et clauses contractuelles |
+| Distant 3 | non | idem ; « La liste des pays reconnus… est publiée par la Commission européenne » |
+
+La note fixe est présente sous les 6 réponses. **Limite vue sur le 1er essai local** : le contrôle retire une phrase, pas le raisonnement qui en découle ; une conclusion tirée de la phrase retirée (« par conséquent… uniquement… garanties appropriées ») reste affichée.
+
+### 8.6 Extension demandée par l'auteur : la phrase de conséquence part avec la phrase retirée
+
+**Pourquoi** : dans le 1er essai local de 8.5, la phrase retirée était suivie de « Par conséquent, le transfert est possible uniquement s'il est accompagné de garanties appropriées [2] », qui en gardait la conclusion.
+
+**Règle** : quand une phrase est retirée, la phrase **immédiatement suivante** est retirée avec elle, sous le **même** texte de remplacement, si elle commence par un mot de conséquence : « par conséquent », « en conséquence », « donc », « ainsi », « dès lors », « de ce fait », « c'est pourquoi », « il en résulte », « il s'ensuit », « cela signifie / implique », « ce qui signifie / implique ». Seule la phrase suivante est concernée ; une phrase « Par conséquent… » qui ne suit pas une phrase retirée est gardée. L'alerte le dit : « …, ainsi que 1 phrase(s) qui en tirai(en)t la conséquence ».
+
+**Affichage au fil de l'écriture** : une phrase retirée est retenue jusqu'à ce que la suivante soit complète, puisqu'elle peut être sa conséquence ; le texte affiché reste identique à la réponse finale.
+
+**Stabilité** : le texte de remplacement compte comme une phrase à part, jamais signalée, et comme une phrase déjà retirée : appliquer le contrôle deux fois donne le même texte, et une réponse traitée avant cette extension (8.5, local 1) perd aussi sa phrase de conséquence.
+
+**Tests** (`tests/test_adequacy.py`, 12 tests) : les deux vraies phrases de conséquence de q16 (« Ainsi, le transfert est autorisé uniquement… » du reranker, « Par conséquent… » du 1er essai local) partent avec leur affirmation ; une conséquence qui ne suit pas une phrase retirée est gardée ; affichage au fil de l'écriture identique ; contrôle stable appliqué deux fois.
+
+**Rejoué sur toutes les réponses enregistrées** (sans régénérer) : 6 affirmations retirées (inchangé) et **3 phrases de conséquence** en plus, toutes dans q16 :
+
+| Fichier | Phrase de conséquence retirée |
+|---|---|
+| `answers_heldout_v4.md` | « Ainsi, le transfert ne peut avoir lieu que si des garanties appropriées sont mises en place, notamment par des clauses contractuelles… » |
+| `answers_heldout_v4_rerank.md` | « Ainsi, le transfert est autorisé uniquement s'il est couvert par une garantie appropriée ou une des dérogations de l'article 49. » |
+| `answers_q16_adequacy_redact.md`, local 1 | « Par conséquent, le transfert est possible uniquement s'il est accompagné de garanties appropriées [2]. » |
+
+Les trois tiraient la conclusion « pas de décision d'adéquation, donc seulement des garanties appropriées » ; aucune autre question n'est touchée. Les fichiers de réponses ne sont pas régénérés ni retouchés.
+
+### 8.7 Relecture de l'auteur des 6 réponses de q16, et limite du détecteur
+
+Réponses de `eval/answers_q16_adequacy_redact.md`, **jugées comme le code actuel les afficherait** : la phrase de conséquence du 1er essai local (« Par conséquent… ») est retirée (8.6). Grille `eval/rubric.md`.
+
+| Essai | Verdict de l'auteur | Commentaire |
+|---|---|---|
+| Local 1 | partiel | règle juste, mais réponse hachée par le retrait, et la dernière phrase attribue au passage [1] un renvoi à la liste de la Commission qu'il ne contient pas |
+| Local 2 | partiel | règle juste, art. 48 mal résumé, sans risque |
+| Local 3 | juste | |
+| Distant 1 | juste | |
+| Distant 2 | juste | |
+| Distant 3 | juste | |
+
+**Bilan : 0 réponse dangereuse sur 6** (4 justes, 2 partielles), alors que q16 était dangereuse dans presque toutes les versions précédentes (`heldout_v4`, `heldout_v4_big_gptoss`, `heldout_v4_rerank`).
+
+**Trois filets, dans cet ordre** :
+
+1. **la règle 12 du prompt** : le modèle ne doit pas dire si un pays a une décision d'adéquation ; respectée 3 fois sur 3 en distant et 2 fois sur 3 en local (8.3) ;
+2. **la note fixe du code**, avec le lien officiel, sous toute réponse qui cite les art. 44 à 49 du RGPD : elle ne dépend pas du modèle ;
+3. **le retrait de phrase** (8.5 et 8.6), dernier filet pour ce que le modèle écrit malgré la règle.
+
+**Limite du détecteur** : il ne comprend pas le sens. Il repère un **lieu par sa majuscule** (un mot à majuscule qui n'est ni le premier mot de la phrase ni une institution ou un texte de la liste : Commission, Union, RGPD, « États membres »…). C'est une heuristique : un pays écrit sans majuscule, ou désigné autrement (« ce pays », « là-bas », le nom d'une ville ou d'un hébergeur à la place du pays), passe sans être vu ; un nom propre qui n'est pas un lieu peut au contraire faire signaler une phrase. Il se trompe aussi sur des phrases prudentes et justes (2 fausses alertes documentées dans `tests/test_adequacy.py`), et un retrait peut laisser une réponse hachée (local 1). C'est pourquoi il vient en troisième, après la règle du prompt et la note fixe, et ne remplace pas la relecture humaine.
+
+**La séance 7 bis est terminée** : q24 (diagnostic, entrée de lexique mesurée non retenue, reranker gardé comme option désactivée) et q16 (règle, note fixe, retrait de phrase).

@@ -12,13 +12,23 @@ import re
 import time
 import unicodedata
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from compliance_copilot.embeddings import Embedder
 from compliance_copilot.index import SearchResult, search
 from compliance_copilot.lexical import tokenize
 from compliance_copilot.llm import ChatModel, Generation
+from compliance_copilot.adequacy import (  # noqa: F401 (ADEQUACY_* and cites_transfer_articles kept importable from rag)
+    ADEQUACY_DECISIONS_URL,
+    ADEQUACY_NOTE,
+    REDACTED,
+    SentenceRedactor,
+    cites_transfer_articles,
+    fixed_notes,
+    is_consequence,
+    redact_adequacy_claims,
+)
 from compliance_copilot.privacy import refuse_personal_data
 
 # Written with "vous" from start to end: a prompt that says "tu" to the model makes it say "tu" to the user.
@@ -51,7 +61,8 @@ Règles à respecter :
 8. Ne concluez jamais qu'il n'y a « aucune obligation » ou que quelque chose « ne s'applique pas » parce que les passages n'en parlent pas : écrivez plutôt « les passages trouvés ne traitent pas de ce point ». N'affirmez une absence d'obligation que si un extrait le dit explicitement.
 9. Répondez à chaque partie de la question (par exemple « qui », « quoi » et « quand »), avec chaque passage utile et pas seulement le premier. Quand les extraits ne donnent qu'un principe général (par exemple, une durée de conservation « pas plus longue que nécessaire »), dites-le et précisez que les règles concrètes (durées, montants, modalités) peuvent venir d'autres textes, comme le droit national ou les recommandations de la CNIL.
 10. Vouvoyez toujours la personne : jamais « tu », « toi », « ton », « ta », « tes ». Écrivez en français simple, pour une personne qui n'est pas juriste. Commencez par la réponse directe en une ou deux phrases, puis expliquez brièvement.
-11. Ne donnez aucun conseil qui ne figure pas dans les extraits."""
+11. Ne donnez aucun conseil qui ne figure pas dans les extraits.
+12. Transferts hors de l'Union : n'affirmez jamais qu'un pays tiers a ou n'a pas de décision d'adéquation, ni qu'il assure ou n'assure pas un niveau de protection adéquat, car la liste des décisions en vigueur ne figure pas dans les passages. Expliquez plutôt la règle à partir des extraits (transfert possible sur la base d'une décision d'adéquation, RGPD, article 45, ou, à défaut, de garanties appropriées, RGPD, article 46), puis indiquez que la liste des pays reconnus est publiée par la Commission européenne."""
 
 REFUSAL = "Les textes trouvés ne permettent pas de répondre à cette question."
 ABSTENTION = "Les passages trouvés ne traitent pas directement de votre question."
@@ -168,6 +179,7 @@ class RagAnswer:
     judgment: bool | None = None  # OUI → True, NON → False, unclear or not asked → None
     judge_seconds: float = 0.0
     wait_seconds: float = 0.0  # time spent waiting for the rate limits of an API, not counted in the times above
+    notes: list[str] = field(default_factory=list)  # fixed notes added by the code (not by the model) under the answer
 
     @property
     def verified_extracts(self) -> list[Extract]:
@@ -338,10 +350,11 @@ class AnswerStream:
         self.buffer = ""
         self.state = "extracts"  # then "answer" or "refused"
         self.citations = CitationStream(write)
+        self.sentences = SentenceRedactor(self.citations.feed)  # a claim about a country's adequacy is never shown
 
     def feed(self, piece: str) -> None:
         if self.state == "answer":
-            self.citations.feed(piece)
+            self.sentences.feed(piece)
             return
         if self.state == "refused":
             return
@@ -351,13 +364,14 @@ class AnswerStream:
             extracts = verify_extracts(self.buffer[: match.start()], self.passages)
             if any(extract.verified for extract in extracts):
                 self.state = "answer"
-                self.citations.feed(self.buffer[match.end() :].lstrip(" \n:*_"))
+                self.sentences.feed(self.buffer[match.end() :].lstrip(" \n:*_"))
             else:
                 self.state = "refused"
                 self.write(REFUSAL)
 
     def close(self) -> None:
         if self.state == "answer":
+            self.sentences.close()
             self.citations.close()
         elif self.state == "extracts":  # the model never started its answer
             self.write(REFUSAL)
@@ -805,6 +819,9 @@ def answer_from_passages(
     if abstained:
         text = ABSTENTION
     shown = not refused and not abstained
+    removed: list[str] = []
+    if shown:  # same redaction as the streamed text (AnswerStream)
+        text, removed = redact_adequacy_claims(text)
     citations = check_citations(text, len(passages)) if shown else CitationCheck(cited=[], unknown=[])
     cited = sorted(set(citations.cited) | {extract.passage for extract in extracts if extract.verified}) if shown else []
     warnings = _warnings(
@@ -817,6 +834,14 @@ def answer_from_passages(
         )
     elif judge and not refused and judgment is None:
         warnings.append("Le contrôle de pertinence n'a pas répondu clairement (OUI ou NON) : la réponse est affichée sans ce contrôle.")
+    if removed:
+        claims = [sentence for sentence in removed if not is_consequence(sentence)]
+        consequences = len(removed) - len(claims)
+        warnings.append(
+            "Phrase retirée de la réponse : elle disait qu'un pays a ou n'a pas de décision d'adéquation (ou de niveau de protection "
+            f"adéquat), ce que les textes du copilote ne permettent pas de savoir : « {_short(claims[0])} »{_more(claims)}"
+            + (f", ainsi que {consequences} phrase(s) qui en tirai(en)t la conséquence" if consequences else "") + "."
+        )
     return RagAnswer(
         question=question,
         text=text,
@@ -834,6 +859,7 @@ def answer_from_passages(
         judgment=judgment,
         judge_seconds=judge_seconds,
         wait_seconds=getattr(chat_model, "waited_seconds", 0.0) - waited_before,
+        notes=fixed_notes(passages, cited),
     )
 
 
@@ -857,6 +883,8 @@ def render_footer(answer: RagAnswer) -> str:
         lines.append("Passages consultés mais non cités :")
         for source in others:
             lines += [f"  [{source.number}] {source.label}", f"      {source.url}"]
+    for note in answer.notes:
+        lines.append(f"Note : {note}")
     for warning in answer.warnings:
         lines.append(f"Attention : {warning}")
     lines += ["", DISCLAIMER]
