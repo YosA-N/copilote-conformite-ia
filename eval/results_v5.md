@@ -39,3 +39,80 @@ Articles attendus fixés en **lisant le texte du corpus** (`data/processed/chunk
 | ha01 | Combien de jours de congés payés a un salarié à temps partiel ? | aucun (hors sujet) | — | hors corpus |
 
 Les justifications détaillées (points et paragraphes, ce qui manque au corpus) sont dans le champ `note` de chaque question.
+
+## 2. Recherche (`evaluate_retrieval.py`, 17/11/2026, sur secteur)
+
+Configuration figée (section 0), une seule mesure. Rang cherché parmi les 20 premiers passages ; les questions hors sujet (h06, h07, h08, ha01) ne sont pas comptées.
+
+| Jeu | Questions | hit@1 article | hit@5 article | hit@8 article | hit@1 paragraphe | hit@5 paragraphe | hit@8 paragraphe |
+|---|---|---|---|---|---|---|---|
+| `questions_v2` | 17 (+ 3 hors sujet) | 8/17 | **10/17** | 12/17 | 8/17 | **10/17** | 12/17 |
+| `questions_author` | 5 (+ 1 hors sujet) | 0/5 | **0/5** | 0/5 | 0/5 | **0/5** | 0/5 |
+
+(Une seule question de v2, q39, précise un paragraphe : article au rang 2, définition 5 au rang 3. Le hit@1 au niveau du paragraphe est lu sur les rangs question par question.)
+
+Pour mémoire, sur les questions qui ont servi au réglage : v0 hit@5 10/10, v1 hit@5 16/17 (article) et 15/17 (paragraphe).
+
+Rang de l'article attendu, question par question :
+
+| Question | Article attendu | Rang |
+|---|---|---|
+| q28 rectification d'une adresse | RGPD art. 16 | 1 |
+| q29 exactitude contestée, utilisation pendant la vérification | RGPD art. 18 | 20 |
+| q30 refus automatique par un score | RGPD art. 22 | 1 |
+| q31 application mobile dès la conception | RGPD art. 25 | 1 |
+| q32 fichier géré à deux associations | RGPD art. 26 | 1 |
+| q33 fichier de prospects acheté | RGPD art. 14 | 2 |
+| q34 caméras dans l'atelier | RGPD art. 88 | non trouvé |
+| q35 guide de bonnes pratiques d'une fédération | RGPD art. 40 | 1 |
+| q36 plainte à la CNIL et recours | RGPD art. 77 | 6 |
+| q37 réparation après une fuite | RGPD art. 82 | 6 |
+| q38 extrait de casier judiciaire des bénévoles | RGPD art. 10 | 13 |
+| q39 noms remplacés par des numéros | RGPD art. 4, définition 5 | 2 (déf. 5 au rang 3) |
+| q40 IA à haut risque qui attribue les tâches | AI Act art. 26 | 1 |
+| q41 IA qui note les examens | AI Act annexe III, point 3 | 1 |
+| q42 candidat refusé qui demande pourquoi | AI Act art. 86 | 18 |
+| q43 mesures pour les PME | AI Act art. 62 | 1 |
+| q44 date des obligations à haut risque | AI Act art. 113 | non trouvé |
+| a01 pointeuse à empreinte digitale | RGPD art. 9, § 1 ou § 2 | non trouvé |
+| a02 vente du fichier clients | RGPD art. 6, § 1 ou art. 5 | 12 |
+| a03 IA qui note les commerciaux | AI Act annexe III, point 4 ou art. 26, § 7 | 9 |
+| a04 IA qui enregistre les réunions | RGPD art. 13 ou art. 6, § 1 | non trouvé |
+| a05 photos de la fête | RGPD art. 6, § 1 ou art. 7 | 10 |
+
+**Observé, non corrigé** (règle de l'examen) :
+
+- **Questions de l'auteur : 0 sur 5.** La recherche part vers des passages qui partagent les mots de la question sans y répondre : pour a01, AI Act art. 48 et RGPD art. 20 et 22 (aucune entrée de lexique ne traduit « empreinte digitale » ou « pointeuse » en « données biométriques ») ; pour a04, AI Act art. 12 (« enregistrement ») et art. 75 ; pour a03, AI Act art. 50, § 1 et art. 6 avant l'annexe III, point 4 (rang 9) ; pour a02 et a05, des passages voisins (annexe VIII de l'AI Act, RGPD art. 35 et 8) avant les articles de base 5, 6 et 7. Ce sont des questions de « principe » (base légale, consentement, information) dont les articles généraux sont peu ressemblants aux mots de la question.
+- **q34** (caméras) et **q38** (casier judiciaire) partent vers l'AI Act (art. 75 bis, art. 5, art. 60 et 61) ; **q44** (date d'application) ne trouve pas l'art. 113 dans les 20 premiers passages, la question ressemblant davantage à l'annexe III et à l'art. 2 ; **q42** trouve l'art. 86 au rang 18, après l'annexe III.
+- Les deux jeux d'examen sont nettement moins bien servis que v0 et v1, sur lesquels la recherche a été réglée : c'est le sur-apprentissage annoncé (CLAUDE.md, README).
+
+### 2.1 Vérification demandée par l'auteur : le 0/5 des questions de l'auteur n'est pas un bug de mesure
+
+Calcul refait pas à pas (script temporaire, mêmes fonctions que `evaluate_retrieval.py` : `load_questions`, `article_level`, `matches`, `first_hit_rank`, et même recherche avec les réglages de `.env`), en cherchant cette fois jusqu'au rang 60. Cinq recherches lancées pendant les réponses locales.
+
+- **Lecture du fichier correcte** : les articles attendus sont lus comme des listes, identiques au fichier ; chacun correspond à des morceaux existants du corpus (par exemple `gdpr:art_9:par_2` → `gdpr:art_9:par_2_a-i` et `gdpr:art_9:par_2_j`).
+- **Rangs confirmés** : aucun outil de mesure à corriger.
+
+| Question | Article attendu (niveau article) | 10 premiers passages | Rang (20 premiers) | Rang jusqu'à 60 |
+|---|---|---|---|---|
+| a01 | RGPD art. 9 | AI Act art. 48 ; RGPD art. 20, 22, 47 § 2, 42 ; AI Act art. 63 ; AI Act art. 5 § 2 et § 1 a-e ; RGPD art. 15, 17 | non trouvé | **non trouvé** |
+| a02 | RGPD art. 6 ou art. 5 | AI Act annexe VIII ×2 ; RGPD art. 48 ; AI Act art. 72 ; RGPD art. 47 § 2 et § 1, 30 ; AI Act art. 4 bis ; RGPD art. 15 ; AI Act art. 78 § 3 | 12 | 12 |
+| a03 | AI Act annexe III, point 4 ou art. 26 | AI Act art. 50 § 1 ; art. 6 point d, § 4, § 1 ; annexe III point 8 ; art. 50 § 2 ; art. 75 ×2 ; **annexe III point 4 (rang 9)** ; art. 72 | 9 | 9 |
+| a04 | RGPD art. 13 ou art. 6 | AI Act art. 12 ; art. 75 ×2 ; art. 50 § 1 et § 2 ; art. 9 § 2 et § 1 ; art. 75 quater ×2 ; art. 56 § 5 | non trouvé | **non trouvé** |
+| a05 | RGPD art. 6 ou art. 7 | RGPD art. 35 § 9 et § 1 ; art. 8 ; art. 12 § 1 ; art. 40 § 2 et § 1 ; art. 91 ; art. 64 § 2 ; art. 12 § 5 ; **art. 7 (rang 10)** | 10 | 10 |
+
+**0/5 est réel.**
+
+**Observé, non corrigé** (règle de l'examen) :
+
+- **Faux ami du lexique** : pour a04, l'entrée `registre` (sans limite de mot) se déclenche sur « en**registre** » et ajoute « registre des activités de traitement » à la question ; la recherche part vers l'art. 12 de l'AI Act (enregistrement des journaux) et l'art. 30 du RGPD n'aide pas non plus.
+- Pour a01, aucune entrée ne traduit « empreinte digitale » ou « pointeuse » ; seule « salariés » → « personne concernée » s'ajoute, ce qui n'oriente pas vers les données biométriques (art. 9 absent des 60 premiers).
+- Pour a03, aucune entrée ne se déclenche (« commerciaux », « prime » et « note » ne sont pas dans le lexique).
+
+## 3. Réponses locales (`qwen3:4b-instruct`), sans retouche
+
+`eval/answers_final_local_v2.md` (20 questions) et `eval/answers_final_local_author.md` (6 questions), produites le 17/11/2026 entre 23:09 et 23:37 par `answer_questions.py --questions … --version final_local_v2` puis `final_local_author`.
+
+**Alimentation** : `BatteryStatus` = 2 (secteur) au lancement à 23:09, puis **1 (batterie)** entre les deux fichiers (23:27) et à la fin (23:37). D'après la vitesse de génération question par question, le passage sur batterie a eu lieu **vers q34** : 32 à 35 tokens/s de q28 à q33, puis 15 à 26 tokens/s de q34 à h08, et 5,5 à 18 tokens/s pour les questions de l'auteur (a03 : 228 s de génération).
+
+**Observé, non corrigé** (règle de l'examen : une seule passe, rien n'est régénéré) : le **contenu** des réponses ne dépend pas de la vitesse (mêmes passages, même modèle, température 0,1) ; les **temps** de q34 à h08 et de toutes les questions de l'auteur ne sont pas représentatifs. Les 5 recherches de vérification de la section 2.1 ont tourné pendant ce lot, vers q41-q42, après la baisse de vitesse : elles n'en sont pas la cause.
