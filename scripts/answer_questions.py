@@ -62,6 +62,7 @@ def times_line(answer: RagAnswer) -> str:
         + (f", raisonnement ≈ {len(generation.reasoning.split())} mots" if generation.reasoning else "")
         + f", {generation.tokens_per_second:.1f} tokens/s)"
         + (f" · contrôle de pertinence {answer.judge_seconds:.1f} s" if answer.judge_seconds else "")
+        + (f" · reformulation {answer.rewrite_seconds:.1f} s" if answer.rewrite_seconds else "")
         + (f" · attente des limites de l'API {answer.wait_seconds:.0f} s (non comptée)" if answer.wait_seconds else "")
     )
 
@@ -112,6 +113,8 @@ def section(question, answer: RagAnswer) -> list[str]:
             "</details>",
             "",
         ]
+    if answer.rewrite_terms:
+        lines += [f"Reformulation de la question (termes ajoutés avant la recherche) : {' ; '.join(answer.rewrite_terms)}", ""]
     return lines + [times_line(answer), ""]
 
 
@@ -122,7 +125,7 @@ def refusal_label(answer: RagAnswer) -> str:
 def summary_row(question, answer: RagAnswer) -> str:
     alerts = "; ".join(answer.warnings) if answer.warnings else "—"
     verified = f"{len(answer.verified_extracts)}/{len(answer.extracts)}"
-    total = answer.search_seconds + answer.generation_seconds + answer.judge_seconds
+    total = answer.rewrite_seconds + answer.search_seconds + answer.generation_seconds + answer.judge_seconds
     return f"| {question.id} | {question.question} | {verified} | {refusal_label(answer)} | {alerts} | {total:.0f} s |"
 
 
@@ -180,7 +183,9 @@ def header(settings: Settings, version: str, question_sets: list, summary: list[
         + (f"{settings.search_max_per_article} au plus par article" if settings.search_max_per_article else "sans limite par article")
         + (", 1er paragraphe ajouté quand un paragraphe suivant d'un article découpé est retenu" if settings.search_first_paragraph else "")
         + (f", reranker `{settings.reranker_model}` sur CPU ({settings.search_rerank_candidates} candidats reclassés avant la limite par article)"
-           if settings.search_rerank else ""),
+           if settings.search_rerank else "")
+        + (", reformulation de la question par le modèle avant la recherche (termes juridiques ajoutés, sans conclusion)"
+           if settings.search_rewrite else ""),
         "- Contrôle de pertinence (juge) : "
         + ("activé ; si le modèle juge que les extraits ne répondent pas directement à la question, la réponse est remplacée par "
            f"« {ABSTENTION} »" if settings.answer_judge else "désactivé"),
@@ -249,7 +254,7 @@ def main() -> int:
                 question.question, INDEX_DIR, embedder, chat_model, k=settings.search_k, mode=settings.search_mode,
                 lexicon=settings.search_lexicon, max_per_article=settings.search_max_per_article, judge=settings.answer_judge,
                 first_paragraph=settings.search_first_paragraph,
-                reranker=reranker, rerank_candidates=settings.search_rerank_candidates,
+                reranker=reranker, rerank_candidates=settings.search_rerank_candidates, rewrite=settings.search_rewrite,
             )
         except (IndexNotReadyError, EmbeddingError, LLMError) as error:
             print(f"[ERREUR] {error}")
@@ -259,7 +264,7 @@ def main() -> int:
         sections[question.id], rows[question.id] = section(question, answer), summary_row(question, answer)
         write()  # after every answer, so that a stopped run keeps what was done
         verified = f"{len(answer.verified_extracts)}/{len(answer.extracts)}"
-        total = answer.search_seconds + answer.generation_seconds + answer.judge_seconds
+        total = answer.rewrite_seconds + answer.search_seconds + answer.generation_seconds + answer.judge_seconds
         print(f"     {total:.0f} s, extraits vérifiés {verified}, refus : {refusal_label(answer)}"
               + (f", attente de l'API {answer.wait_seconds:.0f} s" if answer.wait_seconds else ""), flush=True)
 

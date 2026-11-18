@@ -30,6 +30,7 @@ from compliance_copilot.adequacy import (  # noqa: F401 (ADEQUACY_* and cites_tr
     redact_adequacy_claims,
 )
 from compliance_copilot.privacy import refuse_personal_data
+from compliance_copilot.rewrite import rewrite_terms
 
 # Written with "vous" from start to end: a prompt that says "tu" to the model makes it say "tu" to the user.
 SYSTEM_PROMPT = """Vous êtes le copilote de conformité : vous aidez les PME et les associations à comprendre le RGPD et l'AI Act.
@@ -180,6 +181,8 @@ class RagAnswer:
     judge_seconds: float = 0.0
     wait_seconds: float = 0.0  # time spent waiting for the rate limits of an API, not counted in the times above
     notes: list[str] = field(default_factory=list)  # fixed notes added by the code (not by the model) under the answer
+    rewrite_terms: list[str] = field(default_factory=list)  # legal terms added to the question before the search (SEARCH_REWRITE)
+    rewrite_seconds: float = 0.0
 
     @property
     def verified_extracts(self) -> list[Extract]:
@@ -755,18 +758,30 @@ def answer_question(
     first_paragraph: bool = False,
     reranker=None,
     rerank_candidates: int = 20,
+    rewrite: bool = False,
 ) -> RagAnswer:
     """Search the closest passages, have the model quote them and answer, then check everything.
 
     With a remote model, a question that holds personal data raises PersonalDataError before the search and
-    before anything is sent (compliance_copilot.privacy)."""
+    before anything is sent (compliance_copilot.privacy). With rewrite=True, the model first adds the legal
+    wording of the question (compliance_copilot.rewrite), after that guard."""
     refuse_personal_data(question, chat_model)
+    terms, rewrite_seconds, rewrite_wait = [], 0.0, 0.0
+    if rewrite:
+        waited_before = getattr(chat_model, "waited_seconds", 0.0)
+        start = time.perf_counter()
+        terms = rewrite_terms(question, chat_model)
+        rewrite_wait = getattr(chat_model, "waited_seconds", 0.0) - waited_before
+        rewrite_seconds = time.perf_counter() - start - rewrite_wait
     start = time.perf_counter()
     found = search(question, index_dir, embedder, k=k, mode=mode, lexicon=lexicon, max_per_article=max_per_article,
-                   first_paragraph=first_paragraph, reranker=reranker, rerank_candidates=rerank_candidates)
+                   first_paragraph=first_paragraph, reranker=reranker, rerank_candidates=rerank_candidates, extra_terms=terms)
     search_seconds = time.perf_counter() - start
     passages = fit_passages(question, found, chat_model)
-    return answer_from_passages(question, passages, chat_model, on_text, search_seconds, found=len(found), judge=judge)
+    answer = answer_from_passages(question, passages, chat_model, on_text, search_seconds, found=len(found), judge=judge)
+    answer.rewrite_terms, answer.rewrite_seconds = terms, rewrite_seconds
+    answer.wait_seconds += rewrite_wait
+    return answer
 
 
 def judge_extracts(question: str, extracts: list[str], chat_model: ChatModel) -> bool | None:

@@ -1,35 +1,48 @@
-"""Compare several search configurations on the v0 and v1 questions (hit@1, hit@5, hit@8, ranks).
+"""Compare several search configurations on the question sets (hit@1, hit@5, ranks), by set and in total.
 
 Two levels: the article, and the paragraph when a question names the one that matters (session 6).
 Prints Markdown tables. The question vectors computed by Ollama on the CPU vary very slightly
 from one run to the next, which can swap two passages with almost the same score: with
 --repeat N, everything is measured N times and a varying result is shown as a range ("11–12").
-The hybrid configurations, rejected at session 5, are no longer measured (see eval/results_v1.md).
-Run scripts/build_index.py first.
+The query rewriting is asked again at each run (the model's reply may vary too); with --rewrite-log,
+the terms it gave are written to a JSON file. Run scripts/build_index.py first.
 
 Usage, from the repository root:
     .venv\\Scripts\\python scripts\\compare_retrieval.py [--repeat 3]
+    .venv\\Scripts\\python scripts\\compare_retrieval.py --repeat 3 --configs current,nolex,rerank,rw_local,rw_remote
 """
 
 import argparse
+import dataclasses
+import json
 import sys
+from pathlib import Path
 
 from compliance_copilot.config import EVAL_DIR, INDEX_DIR, load_settings
 from compliance_copilot.embeddings import EmbeddingError, make_embedder
 from compliance_copilot.evaluation import article_level, first_hit_rank, hit_at_k, load_questions
 from compliance_copilot.index import IndexNotReadyError, search
+from compliance_copilot.llm import LLMError, make_chat_model
 from compliance_copilot.rerank import CrossEncoderReranker, RerankerError
+from compliance_copilot.rewrite import rewrite_terms
 
 DEPTH = 20
-CONFIGS = [  # (label, mode, lexicon, at most N chunks of the same article, first paragraph of a split article added, reranker)
-    ("vecteurs seuls (départ)", "vector", "off", None, False, False),
-    ("vecteurs + lexique", "vector", "all", None, False, False),
-    ("vecteurs + lexique + 2 par article", "vector", "all", 2, False, False),
-    ("vecteurs + lexique + 2 par article + 1er paragraphe", "vector", "all", 2, True, False),
-]
-RERANK_CONFIG = ("vecteurs + lexique + reranker (20 → 5) + 2 par article + 1er paragraphe", "vector", "all", 2, True, True)
+CURRENT = ("vector", "all", 2, True)  # mode, lexicon, at most 2 chunks per article, first paragraph of a split article
+CONFIGS = {  # key: (label, mode, lexicon, limit per article, first paragraph, reranker, query rewriting backend or None)
+    "start": ("vecteurs seuls (départ)", "vector", "off", None, False, False, None),
+    "lexicon": ("vecteurs + lexique", "vector", "all", None, False, False, None),
+    "limit": ("vecteurs + lexique + 2 par article", "vector", "all", 2, False, False, None),
+    "current": ("actuelle (lexique + 2 par article + 1er paragraphe)", *CURRENT, False, None),
+    "nolex": ("sans lexique (2 par article + 1er paragraphe)", "vector", "off", 2, True, False, None),
+    "rerank": ("actuelle + reranker (20 → 5)", *CURRENT, True, None),
+    "rw_local": ("actuelle + reformulation locale", *CURRENT, False, "ollama"),
+    "rw_remote": ("actuelle + reformulation distante", *CURRENT, False, "openai"),
+    "rw_local_rerank": ("actuelle + reformulation locale + reranker", *CURRENT, True, "ollama"),
+    "rw_remote_rerank": ("actuelle + reformulation distante + reranker", *CURRENT, True, "openai"),
+}
+DEFAULT_CONFIGS = ["start", "lexicon", "limit", "current"]
 LEVELS = [("article", True), ("paragraphe", False)]
-SETS = [("v0", "questions_v0.jsonl"), ("v1", "questions_v1.jsonl")]
+SETS = {"v0": "questions_v0.jsonl", "v1": "questions_v1.jsonl", "v2": "questions_v2.jsonl", "author": "questions_author.jsonl"}
 
 
 class CachedReranker:
@@ -69,61 +82,88 @@ def spread(values: list) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Compare les configurations de recherche sur v0 et v1.")
+    parser = argparse.ArgumentParser(description="Compare les configurations de recherche sur les jeux de questions.")
     parser.add_argument("--repeat", type=int, default=1, help="nombre de mesures complètes (3 recommandé)")
-    parser.add_argument("--rerank", action="store_true", help="ajouter la configuration avec le reranker (RERANKER_MODEL, torch requis)")
+    parser.add_argument("--configs", help=f"configurations, séparées par des virgules, parmi : {', '.join(CONFIGS)} "
+                                          f"(par défaut : {','.join(DEFAULT_CONFIGS)})")
+    parser.add_argument("--sets", default=",".join(SETS), help=f"jeux de questions parmi : {', '.join(SETS)} (par défaut : tous)")
+    parser.add_argument("--rerank", action="store_true", help="ajouter la configuration « rerank » (RERANKER_MODEL, torch requis)")
+    parser.add_argument("--rewrite-log", type=Path, help="fichier JSON où écrire les termes donnés par la reformulation")
     args = parser.parse_args()
+    keys = args.configs.split(",") if args.configs else list(DEFAULT_CONFIGS)
+    if args.rerank and "rerank" not in keys:
+        keys.append("rerank")
+    unknown = [key for key in keys if key not in CONFIGS] + [name for name in args.sets.split(",") if name not in SETS]
+    if unknown:
+        print(f"[ERREUR] Inconnu : {', '.join(unknown)}")
+        return 2
+    configs = [(key, *CONFIGS[key]) for key in keys]
+    sets = args.sets.split(",")
     settings = load_settings()
-    configs = [*CONFIGS, RERANK_CONFIG] if args.rerank else CONFIGS
-    reranker = CachedReranker(CrossEncoderReranker(settings.reranker_model)) if args.rerank else None
-    question_sets = {name: [q for q in load_questions(EVAL_DIR / file) if q.expected] for name, file in SETS}
+    reranker = CachedReranker(CrossEncoderReranker(settings.reranker_model)) if any(c[6] for c in configs) else None
+    rewriters = {backend: make_chat_model(dataclasses.replace(settings, llm_backend=backend))
+                 for backend in {c[7] for c in configs if c[7]}}
+    question_sets = {name: [q for q in load_questions(EVAL_DIR / SETS[name]) if q.expected] for name in sets}
     runs: list[dict[tuple[str, str, str], list[int | None]]] = []
+    rewrite_log: list[dict] = []
     for run in range(args.repeat):
         embedder = CachedEmbedder(make_embedder(settings, settings.query_embedding_device))  # fresh vectors each run
+        rewritten: dict[tuple[str, str], list[str]] = {}  # asked again at each run, shared by the configurations of a run
         ranks: dict[tuple[str, str, str], list[int | None]] = {}
-        for label, mode, lexicon, limit, first_paragraph, rerank in configs:
+        for key, label, mode, lexicon, limit, first_paragraph, rerank, backend in configs:
             print(f"… mesure {run + 1}/{args.repeat} : {label}", file=sys.stderr, flush=True)
             for name, questions in question_sets.items():
-                try:
-                    found = [
-                        [r.id for r in search(q.question, INDEX_DIR, embedder, k=DEPTH, mode=mode, lexicon=lexicon, max_per_article=limit,
-                                              first_paragraph=first_paragraph, reranker=reranker if rerank else None,
-                                              rerank_candidates=settings.search_rerank_candidates)]
-                        for q in questions
-                    ]
-                except (IndexNotReadyError, EmbeddingError, RerankerError) as error:
-                    print(f"[ERREUR] {error}")
-                    return 1
+                found = []
+                for q in questions:
+                    try:
+                        terms = None
+                        if backend:
+                            if (backend, q.id) not in rewritten:
+                                rewritten[backend, q.id] = rewrite_terms(q.question, rewriters[backend])
+                                rewrite_log.append({"run": run + 1, "backend": backend, "id": q.id, "terms": rewritten[backend, q.id]})
+                            terms = rewritten[backend, q.id]
+                        found.append([r.id for r in search(q.question, INDEX_DIR, embedder, k=DEPTH, mode=mode, lexicon=lexicon,
+                                                           max_per_article=limit, first_paragraph=first_paragraph,
+                                                           reranker=reranker if rerank else None,
+                                                           rerank_candidates=settings.search_rerank_candidates, extra_terms=terms)])
+                    except (IndexNotReadyError, EmbeddingError, RerankerError, LLMError) as error:
+                        print(f"[ERREUR] {error}")
+                        return 1
                 for level, by_article in LEVELS:
-                    ranks[label, name, level] = [
+                    ranks[key, name, level] = [
                         first_hit_rank(ids, article_level(q.expected) if by_article else q.expected) for ids, q in zip(found, questions)
                     ]
         runs.append(ranks)
+    if args.rewrite_log:
+        args.rewrite_log.write_text(json.dumps(rewrite_log, ensure_ascii=False, indent=1), encoding="utf-8")
 
-    print(f"Mesures répétées {args.repeat} fois ; « a–b » = résultat variable d'une mesure à l'autre.\n")
+    total = sum(len(questions) for questions in question_sets.values())
+    print(f"Mesures répétées {args.repeat} fois ; « a–b » = résultat variable d'une mesure à l'autre. "
+          f"Questions avec article attendu : {', '.join(f'{name} {len(qs)}' for name, qs in question_sets.items())} (total {total}).\n")
     for level, _ in LEVELS:
         print(f"Niveau {level} :\n")
-        header = " | ".join(f"{name} hit@1 | {name} hit@5 | {name} hit@8" for name, _ in SETS)
-        print(f"| Configuration | {header} |")
-        print("|---|" + "---|" * (3 * len(SETS)))
-        for label, *_ in configs:
+        header = " | ".join(f"{name} hit@1 | {name} hit@5" for name in sets)
+        print(f"| Configuration | {header} | total hit@1 | total hit@5 |")
+        print("|---|" + "---|" * (2 * len(sets) + 2))
+        for key, label, *_ in configs:
             cells = " | ".join(
-                " | ".join(f"{spread([hit_at_k(r[label, name, level], k) for r in runs])}/{len(question_sets[name])}" for k in (1, 5, 8))
-                for name, _ in SETS
+                " | ".join(f"{spread([hit_at_k(r[key, name, level], k) for r in runs])}/{len(question_sets[name])}" for k in (1, 5))
+                for name in sets
             )
-            print(f"| {label} | {cells} |")
+            totals = " | ".join(f"{spread([sum(hit_at_k(r[key, name, level], k) for name in sets) for r in runs])}/{total}" for k in (1, 5))
+            print(f"| {label} | {cells} | {totals} |")
         print()
 
     print("Rang du premier article attendu, puis du paragraphe précisé s'il diffère (— = pas dans les 20 premiers) :\n")
-    print("| Question | " + " | ".join(label for label, *_ in configs) + " |")
+    print("| Question | " + " | ".join(label for _, label, *_ in configs) + " |")
     print("|---|" + "---|" * len(configs))
     for name, questions in question_sets.items():
         for index, question in enumerate(questions):
             cells = []
-            for label, *_ in configs:
-                cell = spread([r[label, name, "article"][index] or "—" for r in runs])
+            for key, *_ in configs:
+                cell = spread([r[key, name, "article"][index] or "—" for r in runs])
                 if question.expected != article_level(question.expected):
-                    cell += f" (§ {spread([r[label, name, 'paragraphe'][index] or '—' for r in runs])})"
+                    cell += f" (§ {spread([r[key, name, 'paragraphe'][index] or '—' for r in runs])})"
                 cells.append(cell)
             print(f"| {question.id} | {' | '.join(cells)} |")
     return 0
