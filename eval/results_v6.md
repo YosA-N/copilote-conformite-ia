@@ -115,3 +115,29 @@ Temps de la nouvelle configuration : reformulation locale **3,3 s médian** (max
 | a04 compte rendu de réunion | réponse (faux à l'examen), absent | réponse, absent (inchangé) |
 
 Le juge local s'abstient toujours avec l'article attendu dans les passages (q10, q18, q34, a02).
+
+### 4.2 Distant (`qwen/qwen3.8-27b`) : 51 réponses sur 58, la suite demain
+
+`eval/answers_v6_remote.md` (v0 + 2 hors sujet, 12 réponses), `answers_v6_remote_v1.md` (20) et `answers_v6_remote_v2.md` (19 sur 20) ; 18/11/2026 à partir de 16:49, sur secteur. **Arrêté par le quota du jour de Groq** (200 000 tokens sur 24 heures glissantes ; la reformulation et les mesures de la section 2 en avaient déjà consommé une partie), puis repris par petits lots ; arrêté volontairement à 18:05 avec l'accord de l'auteur. **Restent à générer demain** avec `--resume` : **h08** (v2) et **les 6 questions de l'auteur** (`answers_v6_remote_author.md`). Le modèle étant en preview, les réponses distantes auront été produites sur deux jours.
+
+Mesures du code, comparées à la configuration actuelle en mode distant (`answers_v4_big_qwen27b.md` et `answers_heldout_v4_big_qwen27b.md` pour v0 et v1, `answers_final_remote_v2.md` pour v2) :
+
+| Distant | Configuration actuelle | Reformulation + reranker |
+|---|---|---|
+| v0 + v1 (32 questions) : réponses données | 26 / 27 | 27 / 27 |
+| v0 + v1 : abstentions | 1 | 0 |
+| v0 + v1 : extraits vérifiés / recopiés | 137 / 139 | 125 / 130 |
+| v0 + v1 : réponses avec alerte | 8 / 32 | 9 / 32 |
+| v2 (17 questions + hors sujet) : réponses données | 11 / 17 | **14 / 17** |
+| v2 : abstentions | 2 | 2 |
+| v2 : extraits vérifiés / recopiés | 52 / 54 | 68 / 75 |
+| Temps total par question (médian) | 4 s | **30 s** (recherche avec reranker sur le processeur) |
+
+En mode distant, le reranker tourne toujours sur l'ordinateur : il fait passer une question de 4 s à environ 30 s.
+
+## 5. Décision : en attente de la relecture de l'auteur
+
+- **Recherche** : la configuration « reformulation + reranker » passe la règle (42–43/49 en local, 42/49 en distant, contre 36/49 ; aucun recul sur aucun jeu). La reformulation seule ne la passe pas.
+- **Réponses** : à relire selon `eval/rubric.md` pour la seconde partie de la règle (**aucune réponse dangereuse créée**) : les 58 réponses locales et, une fois complétées, les 58 réponses distantes (56 questions changent de passages).
+- **Coût** : une question locale passe de 44 s à 74 s médian (45 sur 58 au-delà de 60 s) ; en distant, de 4 s à 30 s.
+- **En attendant**, `SEARCH_REWRITE` et `SEARCH_RERANK` restent **désactivés par défaut** ; le lexique en mots entiers est actif (correction d'un défaut).

@@ -77,6 +77,10 @@ Pour l'essayer :
 
 puis `SEARCH_RERANK=on` dans `.env`. Le copilote fonctionne normalement sans ces bibliothèques : elles ne sont chargées que si le reranker est activé.
 
+### Reformulation de la question (optionnelle, désactivée par défaut)
+
+Avec `SEARCH_REWRITE=on`, le modèle ajoute à la question quelques termes juridiques avant la recherche (par exemple « données biométriques » pour « empreinte digitale »). Le code écarte tout terme qui contient une conclusion (« interdit », « autorisé », « obligatoire »…) ou un chiffre. Mesurée à la séance 7 ter (`eval/results_v6.md`) : seule, elle fait reculer certaines questions ; avec le reranker, la recherche s'améliore sur l'ensemble des questions de réglage. La décision de l'activer attend la relecture des réponses. En mode distant, la question est envoyée une fois de plus à Groq.
+
 
 ## Poser une question
 
