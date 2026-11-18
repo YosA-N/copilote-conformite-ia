@@ -67,7 +67,7 @@ Un **reranker** (**cross-encoder**) peut relire les 20 meilleurs passages trouv�
 **Il est désactivé par défaut** (`SEARCH_RERANK=off`), pour deux raisons mesurées à la séance 7 bis (`eval/results_v4.md`, section 7) :
 
 - **le coût** : 22 à 33 s de plus par question (une question locale passe d'environ 39 s à environ 65 s), 2,3 Go de modèle téléchargés une fois, et environ 1 Go de bibliothèques (`torch`, `transformers`) ;
-- **le bilan avec le modèle local** : la recherche est nettement meilleure (l'article attendu arrive en premier pour 10 questions de mesure sur 10, contre 7), mais deux réponses deviennent dangereuses, alors que deux autres sont corrigées et qu'une troisième devient un refus prudent. Sur les 32 questions relues : 17 justes, 6 partielles, 4 fausses, 5 dangereuses, contre 17, 5, 4 et 6 sans reranker. La cause est la façon dont le petit modèle local rédige à partir des nouveaux passages, pas la recherche.
+- **le bilan avec le modèle local**, mesuré sur les questions de réglage seulement (le reranker n'a pas été passé à l'examen final, voir [Résultats](#résultats)) : la recherche est nettement meilleure (l'article attendu arrive en premier pour 10 questions de mesure sur 10, contre 7), mais deux réponses deviennent dangereuses, alors que deux autres sont corrigées et qu'une troisième devient un refus prudent. Sur les 32 questions relues : 17 justes, 6 partielles, 4 fausses, 5 dangereuses, contre 17, 5, 4 et 6 sans reranker. La cause est la façon dont le petit modèle local rédige à partir des nouveaux passages, pas la recherche.
 
 Pour l'essayer :
 
@@ -126,7 +126,18 @@ Chaque version est relue par un humain avec la même grille, décrite dans `eval
 | v2 (séance 5 bis) | 6 | 5 | 0 | 1 |
 | v3 (séance 5 ter) | 9 | 3 | 0 | 0 |
 
-Ces chiffres portent sur les 12 questions qui ont servi à régler le système : ils sont donc optimistes. Un examen final de 20 nouvelles questions (`eval/questions_v2.jsonl`) est mis de côté et ne sera utilisé qu'à la fin du projet.
+Ces chiffres portent sur les 12 questions qui ont servi à régler le système : ils sont donc optimistes. À l'examen final, sur 26 questions jamais vues, le modèle local obtient 9 justes, 2 partielles, 14 fausses et 1 dangereuse (section [Résultats](#résultats)).
+
+## Résultats
+
+Deux mesures, à lire ensemble : les **questions de réglage** ont servi à régler le copilote (elles sont donc optimistes) ; l'**examen final** porte sur des questions qu'il n'avait jamais vues, posées une seule fois, sans rien changer ensuite. Détail : [`eval/results_v5.md`](eval/results_v5.md).
+
+| | Recherche : article attendu dans les 5 passages (hit@5) | Verdicts, modèle local (juste / partiel / faux / dangereux) | Verdicts, mode distant (juste / partiel / faux / dangereux) |
+|---|---|---|---|
+| **Questions de réglage** (v0 et v1, 32 questions) | 26 / 27 | 17 / 5 / 4 / 6 | 25 / 5 / 2 / 0 |
+| **Examen final** (questions jamais vues, 26 questions) | **10 / 22** | **9 / 2 / 14 / 1** | **13 / 1 / 11 / 1** |
+
+À l'examen, la plupart des réponses fausses sont des refus prudents (« les passages trouvés ne traitent pas directement de votre question ») : le bon article n'avait pas été trouvé. Il reste une réponse dangereuse dans chaque mode : une date d'application inventée (local) et des données pseudonymisées présentées comme sortant du RGPD (distant). Les questions d'examen ont été écrites par Claude, qui connaissait le projet : c'est une mesure honnête, mais pas un test sur de vraies questions d'utilisateurs.
 
 ## Limites connues
 
@@ -142,9 +153,9 @@ Ces chiffres portent sur les 12 questions qui ont servi à régler le système :
 
   Les durées, montants et modalités concrètes viennent souvent de ces autres textes.
 - **Décisions d'adéquation absentes** : le corpus ne contient pas les décisions de la Commission européenne qui reconnaissent qu'un pays hors de l'Union protège suffisamment les données. Le copilote ne peut donc pas dire si un pays donné en bénéficie : il explique la règle (RGPD, articles 45 et 46). Si le modèle affirme quand même qu'un pays nommé a ou n'a pas de décision d'adéquation, le code retire cette phrase de la réponse, ainsi que la phrase suivante si elle en tire la conséquence (« Par conséquent… », « Ainsi… »), les remplace par « [phrase retirée : le copilote ne peut pas savoir si ce pays bénéficie d'une décision d'adéquation] » et le signale. Ce contrôle compare des formes de phrases, sans comprendre le sens : il retire parfois aussi une phrase prudente et juste. Dès qu'une réponse cite les articles 44 à 49, le code ajoute un renvoi vers [la page de la Commission européenne sur les décisions d'adéquation](https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/adequacy-decisions_en) (en anglais).
-- **Recherche imparfaite** : le passage utile n'est pas toujours parmi les 5 retenus. Par exemple, l'art. 32 (sécurité) n'est pas trouvé pour une des questions de test.
+- **Recherche imparfaite** : c'est la principale faiblesse. À l'examen final, l'article attendu n'est dans les 5 passages que pour 10 questions sur 22 (contre 26 sur 27 sur les questions de réglage). Le copilote refuse alors le plus souvent de répondre, ce qui est sans danger mais sans réponse.
 - **Lenteur** : comptez environ 40 secondes par réponse (contrôle de pertinence compris) avec une carte graphique de 4 Go ; les questions à longue liste dépassent la minute. C'est davantage sans carte graphique.
-- **Sur-apprentissage** : le système a été réglé sur les questions de test. Sur des questions qu'il n'avait jamais vues, la version de la séance 5 ter n'avait que 6 réponses justes sur 20, dont 4 dangereuses (`eval/results_v2.md`). Seul l'examen final, mis de côté, mesurera honnêtement la version actuelle.
+- **Sur-apprentissage** : le système a été réglé sur les questions de test. À l'examen final, sur des questions jamais vues, il obtient 9 justes sur 26 en local et 13 sur 26 en mode distant, avec 1 réponse dangereuse dans chaque mode (section [Résultats](#résultats), `eval/results_v5.md`).
 
 ## Mémoire de la carte graphique
 
@@ -168,7 +179,7 @@ Avec ces valeurs, `qwen3:4b-instruct` occupe 3,68 Go sur une carte de 4 Go (`min
 
 Depuis la séance 7, un **mode distant** est proposé en option : la rédaction et le contrôle de pertinence sont confiés à `qwen/qwen3.8-27b`, servi par le niveau gratuit de [Groq](https://groq.com) (API compatible OpenAI). La recherche dans les textes reste locale.
 
-**Pourquoi ce modèle** (`eval/results_v3.md`, relecture de l'auteur sur les 32 questions de test) : 0 réponse dangereuse contre 6 pour le modèle local, 25 justes contre 17, et un temps médian par question de 4 s contre 39 s. Le modèle plus gros `openai/gpt-oss-120b` a aussi été essayé et n'a pas été retenu (3 réponses dangereuses, et des extraits non retrouvés mot pour mot).
+**Pourquoi ce modèle** (`eval/results_v3.md`, relecture de l'auteur sur les 32 questions de réglage) : 0 réponse dangereuse contre 6 pour le modèle local, 25 justes contre 17, et un temps médian par question de 4 s contre 39 s. À l'examen final, sur 26 questions jamais vues : 13 justes contre 9 et 1 réponse dangereuse dans chaque mode (`eval/results_v5.md`). Le modèle plus gros `openai/gpt-oss-120b` a aussi été essayé et n'a pas été retenu (3 réponses dangereuses, et des extraits non retrouvés mot pour mot).
 
 **Ce qu'il faut savoir avant de l'activer :**
 - `qwen/qwen3.8-27b` est un modèle en **preview** chez Groq : il peut changer ou disparaître sans préavis (`llama-3.3-70b-versatile`, prévu au départ, a été retiré le 16/08/2026). Le copilote le dit alors clairement et propose de revenir au mode local.

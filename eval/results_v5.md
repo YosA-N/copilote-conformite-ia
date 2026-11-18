@@ -1,6 +1,6 @@
 # Examen final — questions_v2 et questions de l'auteur
 
-L'examen final mesure la configuration retenue sur des questions qui n'ont servi à aucun réglage : `eval/questions_v2.jsonl` (20 questions, figées au commit `65ee0c4`, ni lues ni utilisées avant cet examen) et `eval/questions_author.jsonl` (6 questions). **Lancé le 17/11/2026 en une seule passe (sections 2 à 5) ; relecture de l'auteur à venir : aucun verdict ici.**
+L'examen final mesure la configuration retenue sur des questions qui n'ont servi à aucun réglage : `eval/questions_v2.jsonl` (20 questions, figées au commit `65ee0c4`, ni lues ni utilisées avant cet examen) et `eval/questions_author.jsonl` (6 questions). **Lancé le 17/11/2026 en une seule passe (sections 2 à 5) ; relu par l'auteur le 18/11/2026 (section 6).**
 
 ## 0. Configuration figée (écrite le 17/11/2026, avant tout lancement)
 
@@ -159,3 +159,27 @@ Alertes du code, par type (nombre de réponses) :
 - **Le juge local s'abstient alors que l'article attendu est dans les passages** pour q30 (art. 22, passage [1]), q33 (art. 14, passage [2]) et q41 (annexe III, point 3, passage [1]) ; le modèle distant répond à ces trois questions. Même limite que celle vue à la séance 7 bis (juge local instable, `results_v4.md`, section 2.3).
 - **Réponses données sans l'article attendu** : en local q36, q44, a04 et a05 ; en distant q36. Ce sont les cas à risque à regarder en premier dans la relecture.
 - Le modèle distant ne répond à aucune des 5 questions de l'auteur (4 abstentions, 1 refus) : la recherche ne lui a fourni l'article attendu pour aucune (section 2).
+
+## 6. Relecture humaine de l'examen
+
+Verdicts de l'auteur (grille `eval/rubric.md`), enregistrés tels quels : `eval/reviews/final_local_v2.jsonl`, `final_remote_v2.jsonl`, `final_local_author.jsonl`, `final_remote_author.jsonl` (`review_summary.py --check` : 17 relectures cohérentes).
+
+| Série | Questions | Juste | Partiel | Faux | Dangereux |
+|---|---|---|---|---|---|
+| local, v2 | 20 | 8 | 2 | 9 | 1 (q44) |
+| local, auteur | 6 | 1 | 0 | 5 | 0 |
+| **local, total** | **26** | **9** | **2** | **14** | **1** |
+| distant, v2 | 20 | 12 | 1 | 6 | 1 (q39) |
+| distant, auteur | 6 | 1 | 0 | 5 | 0 |
+| **distant, total** | **26** | **13** | **1** | **11** | **1** |
+
+Les 4 questions hors sujet (h06, h07, h08, ha01) sont refusées dans les deux modes.
+
+**Conclusions** :
+
+1. **La recherche est le problème principal.** La plupart des réponses fausses sont des abstentions sans danger : **11 sur 14 en local** (q29, q30, q33, q34, q37, q38, q41, q42, a01, a02, a03 ; les 3 autres, q36, a04 et a05, sont des réponses données mais mal fondées) et **11 sur 11 en distant** (6 abstentions du juge et 5 refus faute d'extrait vérifié). L'article attendu manquait aux passages pour 11 des 14 réponses fausses en local et pour les 11 en distant.
+2. **1 réponse dangereuse par mode** : **q44 en local** (date inventée : « à partir de l'entrée en vigueur », puis « le 2 août 2027 », alors que l'art. 113, c), i) fixe le 2 décembre 2027 pour l'annexe III ; l'art. 113 n'était pas dans les passages) et **q39 en distant** (la pseudonymisation présentée comme une sortie du RGPD, alors que des données pseudonymisées restent des données personnelles).
+3. **Le juge local s'abstient même avec l'article attendu au rang 1** (q30, art. 22 ; q41, annexe III, point 3) et au rang 2 (q33, art. 14) ; le modèle distant répond juste à q30 et q33, et partiellement à q41.
+4. **C'est le sur-apprentissage, mesuré.** Sur les questions qui ont servi au réglage, le modèle distant obtenait 13/5/2/0 sur les 20 questions v1 (`heldout_v4_big_qwen27b`) et 12/0/0/0 sur les 12 de v0 ; à l'examen, 13/1/11/1 sur 26. En local : 17/5/4/6 sur 32 au réglage (v4), 9/2/14/1 sur 26 à l'examen. La recherche explique l'essentiel de l'écart : hit@5 de 26/27 au réglage (v0 10/10, v1 16/17) à 10/22 à l'examen (v2 10/17, auteur 0/5).
+
+Réserve : `questions_v2.jsonl` et les questions de l'auteur ont été écrites par Claude, qui connaissait le projet (biais possible, section 1) ; ce sont des questions que le système n'avait jamais vues, mais pas des questions d'utilisateurs réels.
