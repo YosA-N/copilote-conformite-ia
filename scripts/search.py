@@ -13,7 +13,7 @@ from compliance_copilot.config import INDEX_DIR, load_settings
 from compliance_copilot.embeddings import EmbeddingError, make_embedder
 from compliance_copilot.index import IndexNotReadyError, SearchResult, search
 from compliance_copilot.llm import LLMError, make_chat_model
-from compliance_copilot.rerank import RerankerError, make_reranker
+from compliance_copilot.rerank import RerankerError, make_reranker, resolve_search
 from compliance_copilot.rewrite import rewrite_terms
 
 EXCERPT_CHARS = 160
@@ -40,7 +40,9 @@ def main() -> int:
     args = parser.parse_args()
     question = " ".join(args.question)
 
-    settings = load_settings()
+    settings, notice = resolve_search(load_settings())
+    if notice:
+        print(f"[INFO] {notice}\n")
     embedder = make_embedder(settings, settings.query_embedding_device)
     try:
         terms = rewrite_terms(question, make_chat_model(settings)) if settings.search_rewrite else None

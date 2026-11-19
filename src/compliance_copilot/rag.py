@@ -262,8 +262,12 @@ def check_citations(text: str, passage_count: int) -> CitationCheck:
 
 TYPOGRAPHIC = str.maketrans(
     {"\u2019": "'", "\u2018": "'", "\u00ab": None, "\u00bb": None, '"': None, "\u201c": None, "\u201d": None, "\u00ad": None,
+     "\u300c": None, "\u300d": None, "\u300e": None, "\u300f": None,
      "\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2013": "-"}
-)  # apostrophes made plain, quotes dropped, soft hyphen dropped, hyphen variants (non-breaking…) made plain
+)  # apostrophes made plain, quotes dropped (also the corner brackets 「 」 『 』 a remote model wrote, q38 of
+#    session 7 ter), soft hyphen dropped, hyphen variants (non-breaking…) made plain
+OPENING_QUOTE = "«\"“\u300c\u300e"
+CLOSING_QUOTE = "»\"”\u300d\u300f"
 SPACE_BEFORE_PUNCTUATION = re.compile(r"\s+(?=[:;!?,.])")  # « nécessaire : a) » written by a model, « nécessaire: a) » in the text
 
 
@@ -312,9 +316,9 @@ def parse_extracts(extracts_part: str) -> list[tuple[int | None, str]]:
     parsed = []
     for item in items:
         number, text = ITEM.match(item).groups()
-        text = re.sub(r"^[«\"“]\s*", "", text.strip(" *_"))  # also drop Markdown emphasis: *« … »*
-        text = re.sub(r"([»\"”])\s*[*_]*\[\d+[a-z]?\][*_]*\s*$", r"\1", text)  # citation repeated after the quote: « … »**[2]**
-        text = re.sub(r"\s*[»\"”]\s*[.;,]?\s*$", "", text.strip(" *_")).strip(" *_")
+        text = re.sub(rf"^[{OPENING_QUOTE}]\s*", "", text.strip(" *_"))  # also drop Markdown emphasis: *« … »*
+        text = re.sub(rf"([{CLOSING_QUOTE}])\s*[*_]*\[\d+[a-z]?\][*_]*\s*$", r"\1", text)  # citation repeated after the quote: « … »**[2]**
+        text = re.sub(rf"\s*[{CLOSING_QUOTE}]\s*[.;,]?\s*$", "", text.strip(" *_")).strip(" *_")
         if text and text.casefold() not in {"aucun", "aucune", "aucun extrait"}:
             parsed.append((int(number) if number else None, text))
     return parsed

@@ -1,18 +1,18 @@
 """Query rewriting (session 7 ter): before the search, the language model gives the legal wording of the question.
 
-A question in everyday words (« pointeuse à empreinte digitale ») is often far from the words of the law
-(« données biométriques »). The model is asked for a few legal terms only, added to the question like the
+A question in everyday words (« géolocalisation des véhicules ») is often far from the words of the law
+(« données de localisation »). The model is asked for a few legal terms only, added to the question like the
 lexicon additions; the code then drops any term that holds a conclusion (interdit, autorisé, obligatoire,
 oui, non…), a number (article, date) or too many words, so that the search gets vocabulary, never an answer.
 
-Off by default (SEARCH_REWRITE=off). It uses the model of the chosen mode (local or remote), after the
+SEARCH_REWRITE=auto (the default): on in remote mode together with the reranker, off in local mode. It uses the model of the chosen mode (local or remote), after the
 personal-data guard of the remote mode. Measured in eval/results_v6.md.
 """
 
 import re
 
 REWRITE_PROMPT = """Vous aidez un moteur de recherche dans le RGPD et le règlement européen sur l'IA (AI Act).
-On vous donne une question écrite avec des mots de tous les jours. Donnez les termes juridiques que ces textes emploient pour les mêmes choses (par exemple, pour « empreinte digitale » : « données biométriques »).
+On vous donne une question écrite avec des mots de tous les jours. Donnez les termes juridiques que ces textes emploient pour les mêmes choses (par exemple, pour « géolocalisation des véhicules » : « données de localisation »).
 Règles :
 - au plus 6 termes, séparés par des points-virgules, sur une seule ligne ;
 - des termes de quelques mots, jamais une phrase ;

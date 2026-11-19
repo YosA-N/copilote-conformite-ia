@@ -26,7 +26,7 @@ from compliance_copilot.evaluation import describe_reference, first_hit_rank, lo
 from compliance_copilot.index import IndexNotReadyError
 from compliance_copilot.llm import LLMError, make_chat_model
 from compliance_copilot.rag import ABSTENTION, RagAnswer, answer_question, render_footer
-from compliance_copilot.rerank import make_reranker
+from compliance_copilot.rerank import make_reranker, resolve_search
 from compliance_copilot.sources import SOURCES
 
 QUESTION_FILES = [EVAL_DIR / "questions_v0.jsonl", EVAL_DIR / "questions_offtopic_v0.jsonl"]
@@ -162,7 +162,7 @@ def generation_line(settings: Settings) -> str:
     )
 
 
-def header(settings: Settings, version: str, question_sets: list, summary: list[str], kept: int) -> list[str]:
+def header(settings: Settings, version: str, question_sets: list, summary: list[str], kept: int, chosen: bool = False) -> list[str]:
     versions = ", ".join(f"{source.name} du {source.version_date}" for source in SOURCES)
     lines = [
         f"# Réponses du copilote — {version}",
@@ -196,6 +196,8 @@ def header(settings: Settings, version: str, question_sets: list, summary: list[
             for path, loaded in question_sets
         ),
     ]
+    if chosen:
+        lines.append("- Sélection : seules les questions choisies avec --ids ont été posées (les autres ne figurent pas dans ce fichier)")
     if kept:
         lines.append(
             f"- Reprise : {kept} réponse(s) conservée(s) d'une série précédente arrêtée en cours de route (par exemple par le quota "
@@ -212,6 +214,7 @@ def main() -> int:
     parser.add_argument("--backend", choices=LLM_BACKENDS, help="moteur de génération, à la place de LLM_BACKEND du .env")
     parser.add_argument("--model", help="modèle, à la place de LLM_API_MODEL (mode distant) ou de LLM_MODEL (mode local) du .env")
     parser.add_argument("--reasoning-effort", help="reasoning_effort envoyé à l'API (none, low…), à la place de LLM_API_REASONING_EFFORT")
+    parser.add_argument("--ids", help="identifiants des questions à poser, séparés par des virgules (par défaut : toutes)")
     parser.add_argument("--resume", action="store_true",
                         help="garder les réponses déjà dans le fichier et ne poser que les questions qui manquent")
     args = parser.parse_args()
@@ -224,13 +227,23 @@ def main() -> int:
         settings = dataclasses.replace(settings, **{"llm_api_model" if settings.remote else "llm_model": args.model})
     if args.reasoning_effort is not None:
         settings = dataclasses.replace(settings, llm_api_reasoning_effort=args.reasoning_effort.strip().lower())
+    settings, notice = resolve_search(settings)
+    if notice:
+        print(f"[INFO] {notice}", flush=True)
     if settings.remote:
         print(f"[API] Modèle distant {settings.generation_model} ({settings.llm_api_base_url}) : questions de test seulement, "
               "aucune donnée personnelle.", flush=True)
     embedder = make_embedder(settings, settings.query_embedding_device)
     chat_model = make_chat_model(settings)
     reranker = make_reranker(settings)
-    question_sets = [(path, load_questions(path)) for path in args.questions]
+    wanted = {id_.strip() for id_ in args.ids.split(",") if id_.strip()} if args.ids else None
+    question_sets = [(path, [q for q in load_questions(path) if wanted is None or q.id in wanted]) for path in args.questions]
+    if wanted is not None:
+        missing = wanted - {q.id for _, loaded in question_sets for q in loaded}
+        if missing:
+            print(f"[ERREUR] Questions introuvables dans les fichiers donnés : {', '.join(sorted(missing))}")
+            return 1
+        question_sets = [(path, loaded) for path, loaded in question_sets if loaded]
     questions = [question for _, loaded in question_sets for question in loaded]
 
     previous = previous_answers(output.read_text(encoding="utf-8")) if args.resume and output.exists() else {}
@@ -243,7 +256,7 @@ def main() -> int:
     def write() -> None:
         summary = [rows[question.id] for question in questions if question.id in rows]
         body = [line for question in questions if question.id in sections for line in sections[question.id]]
-        output.write_text("\n".join(header(settings, args.version, question_sets, summary, len(kept)) + body), encoding="utf-8")
+        output.write_text("\n".join(header(settings, args.version, question_sets, summary, len(kept), wanted is not None) + body), encoding="utf-8")
 
     for question in questions:
         if question.id in kept:

@@ -20,7 +20,7 @@ from compliance_copilot.embeddings import EmbeddingError, make_embedder
 from compliance_copilot.index import IndexNotReadyError
 from compliance_copilot.llm import LLMError, make_chat_model, provider_name
 from compliance_copilot.privacy import PersonalDataError
-from compliance_copilot.rerank import RerankerError, make_reranker
+from compliance_copilot.rerank import RerankerError, make_reranker, resolve_search
 from compliance_copilot.rag import answer_question, passage_label, render_footer
 
 
@@ -62,7 +62,9 @@ def main() -> int:
     args = parser.parse_args()
     question = " ".join(args.question)
 
-    settings = apply_overrides(load_settings(), args.backend, args.model)
+    settings, notice = resolve_search(apply_overrides(load_settings(), args.backend, args.model))
+    if notice:
+        print(f"[INFO] {notice}\n")
     try:
         embedder = make_embedder(settings, settings.query_embedding_device)
         chat_model = make_chat_model(settings)

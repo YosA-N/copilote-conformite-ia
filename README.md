@@ -60,27 +60,26 @@ Un long article découpé en paragraphes pouvait occuper à lui seul les 5 passa
 
 `evaluate_retrieval.py` pose les 10 questions de `eval/questions_v0.jsonl` et indique, pour chacune, le rang du premier article attendu, puis le **hit@1** (l'article attendu arrive en premier) et le **hit@5** (il est dans les 5 premiers passages).
 
-### Reclassement des passages (optionnel, désactivé par défaut)
+### Reformulation de la question et reclassement des passages (activés en mode distant seulement)
 
-Un **reranker** (**cross-encoder**) peut relire les 20 meilleurs passages trouvés et les reclasser selon leur pertinence par rapport à la question, avant de garder les 5 meilleurs. Le modèle utilisé est `BAAI/bge-reranker-v2-m3` (licence Apache-2.0), qui tourne sur le processeur.
+Deux étapes de recherche supplémentaires, décidées à la séance 7 ter (`eval/results_v6.md`) :
 
-**Il est désactivé par défaut** (`SEARCH_RERANK=off`), pour deux raisons mesurées à la séance 7 bis (`eval/results_v4.md`, section 7) :
+- **la reformulation** : le modèle ajoute à la question quelques termes juridiques avant la recherche (par exemple « données de localisation » pour « géolocalisation des véhicules »). Le code écarte tout terme qui contient une conclusion (« interdit », « autorisé », « obligatoire »…) ou un chiffre ;
+- **le reclassement** : un **reranker** (**cross-encoder**) relit les 20 meilleurs passages trouvés et les reclasse selon leur pertinence par rapport à la question, avant de garder les 5 meilleurs. Le modèle est `BAAI/bge-reranker-v2-m3` (licence Apache-2.0), sur le processeur.
 
-- **le coût** : 22 à 33 s de plus par question (une question locale passe d'environ 39 s à environ 65 s), 2,3 Go de modèle téléchargés une fois, et environ 1 Go de bibliothèques (`torch`, `transformers`) ;
-- **le bilan avec le modèle local**, mesuré sur les questions de réglage seulement (le reranker n'a pas été passé à l'examen final, voir [Résultats](#résultats)) : la recherche est nettement meilleure (l'article attendu arrive en premier pour 10 questions de mesure sur 10, contre 7), mais deux réponses deviennent dangereuses, alors que deux autres sont corrigées et qu'une troisième devient un refus prudent. Sur les 32 questions relues : 17 justes, 6 partielles, 4 fausses, 5 dangereuses, contre 17, 5, 4 et 6 sans reranker. La cause est la façon dont le petit modèle local rédige à partir des nouveaux passages, pas la recherche.
+**Par défaut** (`SEARCH_REWRITE=auto` et `SEARCH_RERANK=auto`), les deux sont **activés en mode distant** et **désactivés en mode local**. Vous pouvez forcer `on` ou `off` dans `.env`. La reformulation n'est jamais activée seule par défaut : sans le reclassement, elle fait reculer certaines questions.
 
-Pour l'essayer :
+**Pourquoi en mode distant** : sur les 58 questions de réglage relues par l'auteur, 40 justes, 9 partielles, 9 fausses et **aucune dangereuse**, contre 38, 6, 13 et 1 sans ces étapes ; l'article attendu est trouvé pour 44 questions sur 49 au lieu de 36. Coût : environ 30 s par question au lieu de 4 s (le reclassement tourne sur votre ordinateur), et la question part une fois de plus chez Groq pour la reformulation (après le garde-fou des données personnelles).
+
+**Pourquoi pas en mode local** : avec le petit modèle local, la recherche s'améliore aussi, mais **3 réponses deviennent dangereuses** (30 justes, 7 partielles, 16 fausses, 5 dangereuses, contre 26, 7, 18 et 7), et une question passe de 44 s à 74 s.
+
+Le reclassement demande des bibliothèques supplémentaires (environ 1 Go : `torch`, `transformers`) et un modèle d'environ 2,3 Go, téléchargé une seule fois à la première utilisation :
 
 ```powershell
 .venv\Scripts\python -m pip install -e .[rerank]   # torch et transformers (versions épinglées)
 ```
 
-puis `SEARCH_RERANK=on` dans `.env`. Le copilote fonctionne normalement sans ces bibliothèques : elles ne sont chargées que si le reranker est activé.
-
-### Reformulation de la question (optionnelle, désactivée par défaut)
-
-Avec `SEARCH_REWRITE=on`, le modèle ajoute à la question quelques termes juridiques avant la recherche (par exemple « données biométriques » pour « empreinte digitale »). Le code écarte tout terme qui contient une conclusion (« interdit », « autorisé », « obligatoire »…) ou un chiffre. Mesurée à la séance 7 ter (`eval/results_v6.md`) : seule, elle fait reculer certaines questions ; avec le reranker, la recherche s'améliore sur l'ensemble des questions de réglage. La décision de l'activer attend la relecture des réponses. En mode distant, la question est envoyée une fois de plus à Groq.
-
+Sans ces bibliothèques, le copilote fonctionne normalement : en mode distant, il le signale et revient à la recherche sans reformulation ni reclassement.
 
 ## Poser une question
 
@@ -134,12 +133,17 @@ Ces chiffres portent sur les 12 questions qui ont servi à régler le système :
 
 ## Résultats
 
-Deux mesures, à lire ensemble : les **questions de réglage** ont servi à régler le copilote (elles sont donc optimistes) ; l'**examen final** porte sur des questions qu'il n'avait jamais vues, posées une seule fois, sans rien changer ensuite. Détail : [`eval/results_v5.md`](eval/results_v5.md).
+Des mesures à lire ensemble : les **questions de réglage** ont servi à régler le copilote (elles sont donc optimistes) ; l'**examen final** porte sur des questions qu'il n'avait jamais vues, posées une seule fois, sans rien changer ensuite. Détail : [`eval/results_v5.md`](eval/results_v5.md) (examen) et [`eval/results_v6.md`](eval/results_v6.md) (séance 7 ter).
 
 | | Recherche : article attendu dans les 5 passages (hit@5) | Verdicts, modèle local (juste / partiel / faux / dangereux) | Verdicts, mode distant (juste / partiel / faux / dangereux) |
 |---|---|---|---|
 | **Questions de réglage** (v0 et v1, 32 questions) | 26 / 27 | 17 / 5 / 4 / 6 | 25 / 5 / 2 / 0 |
+| **Après la séance 7 ter : réglage sur toutes les questions connues** (v0, v1, v2, auteur : 58 questions, dont les 26 de l'examen, vues depuis) — *réglage, pas un examen* | local 36 / 49 · distant 44 / 49 | 26 / 7 / 18 / 7 (¹) | 40 / 9 / 9 / 0 (²) |
 | **Examen final** (questions jamais vues, 26 questions) | **10 / 22** | **9 / 2 / 14 / 1** | **13 / 1 / 11 / 1** |
+
+(¹) Configuration locale inchangée par la séance 7 ter (reformulation et reclassement désactivés en local) : verdicts des mêmes réponses qu'avant. (²) Mode distant avec reformulation et reclassement, relu avec l'ancien exemple du prompt de reformulation ; le hit@5 de 44 / 49 est mesuré avec le nouvel exemple (42 / 49 avec l'ancien).
+
+**Seule la ligne « examen final » porte sur des questions jamais vues**, et elle le restera jusqu'à l'examen 2, sur des questions neuves. La ligne « après la séance 7 ter » mesure des réglages faits en connaissant ces questions : elle est optimiste.
 
 À l'examen, la plupart des réponses fausses sont des refus prudents (« les passages trouvés ne traitent pas directement de votre question ») : le bon article n'avait pas été trouvé. Il reste une réponse dangereuse dans chaque mode : une date d'application inventée (local) et des données pseudonymisées présentées comme sortant du RGPD (distant). Les questions d'examen ont été écrites par Claude, qui connaissait le projet : c'est une mesure honnête, mais pas un test sur de vraies questions d'utilisateurs.
 
@@ -186,6 +190,7 @@ Depuis la séance 7, un **mode distant** est proposé en option : la rédaction 
 **Pourquoi ce modèle** (`eval/results_v3.md`, relecture de l'auteur sur les 32 questions de réglage) : 0 réponse dangereuse contre 6 pour le modèle local, 25 justes contre 17, et un temps médian par question de 4 s contre 39 s. À l'examen final, sur 26 questions jamais vues : 13 justes contre 9 et 1 réponse dangereuse dans chaque mode (`eval/results_v5.md`). Le modèle plus gros `openai/gpt-oss-120b` a aussi été essayé et n'a pas été retenu (3 réponses dangereuses, et des extraits non retrouvés mot pour mot).
 
 **Ce qu'il faut savoir avant de l'activer :**
+- En mode distant, la recherche ajoute par défaut la **reformulation de la question** et le **reclassement des passages** (voir [ci-dessus](#reformulation-de-la-question-et-reclassement-des-passages-activés-en-mode-distant-seulement)) : environ 30 s par question au lieu de 4 s, et `pip install -e .[rerank]` pour en profiter (sans quoi le copilote le signale et s'en passe).
 - `qwen/qwen3.8-27b` est un modèle en **preview** chez Groq : il peut changer ou disparaître sans préavis (`llama-3.3-70b-versatile`, prévu au départ, a été retiré le 16/08/2026). Le copilote le dit alors clairement et propose de revenir au mode local.
 - **Votre question et les extraits de loi sont envoyés à Groq.** Avant chaque réponse, une ligne le rappelle, et le modèle qui a rédigé la réponse est nommé sous celle-ci.
 - **N'y mettez jamais de données personnelles** (nom, situation d'une personne, données de clients ou d'adhérents…). Un garde-fou, appliqué dans le cœur du copilote (`rag.answer_question`, donc pour toute interface, présente ou future), refuse d'envoyer une question qui contient une adresse e-mail, un numéro de téléphone, un IBAN ou un numéro de sécurité sociale français, par de simples expressions régulières (`src/compliance_copilot/privacy.py`). **Il ne détecte ni les noms ni les situations personnelles : c'est un filet de sécurité, pas une garantie.** En mode local, rien n'est bloqué, puisque rien ne sort de l'ordinateur.
@@ -205,6 +210,7 @@ Depuis la séance 7, un **mode distant** est proposé en option : la rédaction 
 | `LLM_API_MODEL` ou `--model` (en mode distant) | `qwen/qwen3.8-27b` (défaut) | Modèle distant ; `LLM_MODEL` reste le modèle local |
 | `LLM_API_BASE_URL` | `https://api.groq.com/openai/v1` | Adresse de l'API |
 | `LLM_API_KEY_ENV` | `GROQ_API_KEY` | **Nom** de la variable de `.env` qui contient la clé |
+| `SEARCH_REWRITE` et `SEARCH_RERANK` | `auto` (défaut), `on` ou `off` | Reformulation et reclassement : `auto` = activés en mode distant, désactivés en mode local |
 | `LLM_API_REASONING_EFFORT` | vide (`none` pour qwen3.8-27b) | Réglage `reasoning_effort` envoyé à l'API ; l'option `--reasoning-effort` n'existe que dans `answer_questions.py` et `check_api.py`, pas dans `ask.py` |
 
 `scripts\check_api.py` fait un appel d'essai avec `LLM_API_MODEL` (ou `--model`) et affiche les modèles ouverts à votre clé et les limites réelles de votre compte. Avant chaque commit, `scripts\scan_secrets.py` vérifie qu'aucune clé n'est sur le point d'être publiée. Les fichiers de réponses de l'expérience (`eval/answers_*_big_*.md`) et sa comparaison (`scripts\compare_answers.py`) restent dans le dépôt.
