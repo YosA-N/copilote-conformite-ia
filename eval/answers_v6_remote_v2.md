@@ -2,7 +2,7 @@
 
 > ⚠️ **Attention : certaines réponses de ce fichier sont fausses.** Ce sont les réponses brutes d'une version expérimentale du copilote, conservées telles quelles pour mesurer ses erreurs. Ne les utilisez pas comme information juridique : reportez-vous aux textes officiels sur EUR-Lex et, en cas de doute, à un professionnel ou à la CNIL.
 
-Générées le 18/11/2026 à 18:05 par `scripts/answer_questions.py`, **sans aucune retouche**, pour relecture.
+Générées le 19/11/2026 à 10:47 par `scripts/answer_questions.py`, **sans aucune retouche**, pour relecture.
 
 - Génération : `qwen/qwen3.8-27b` via l'API compatible OpenAI https://api.groq.com/openai/v1 (expérience de la séance 7, questions de test seulement ; modèle tel que servi par l'API à la date ci-dessus) — température 0.1, raisonnement : réglage par défaut du modèle, passages calculés pour un contexte de 8192 tokens comme en local, 2000 tokens au plus par réponse (raisonnement compris) ; le juge est le même modèle
 - Prompt : le modèle recopie d'abord les phrases exactes des passages (EXTRAITS), puis répond à partir d'elles seulement (RÉPONSE) ; le code vérifie chaque extrait mot pour mot et remplace par un refus une réponse sans extrait vérifié
@@ -11,7 +11,7 @@ Générées le 18/11/2026 à 18:05 par `scripts/answer_questions.py`, **sans auc
 - Contrôle de pertinence (juge) : activé ; si le modèle juge que les extraits ne répondent pas directement à la question, la réponse est remplacée par « Les passages trouvés ne traitent pas directement de votre question. »
 - Corpus : versions consolidées RGPD du 2016-05-04, AI Act du 2026-07-27
 - Questions : `eval/questions_v2.jsonl` (17 + 3 hors sujet)
-- Reprise : 18 réponse(s) conservée(s) d'une série précédente arrêtée en cours de route (par exemple par le quota de l'API), 1 générée(s) à la date ci-dessus
+- Reprise : 19 réponse(s) conservée(s) d'une série précédente arrêtée en cours de route (par exemple par le quota de l'API), 1 générée(s) à la date ci-dessus
 
 | # | Question | Extraits vérifiés | Refus | Alertes du code | Temps total |
 |---|---|---|---|---|---|
@@ -34,6 +34,7 @@ Générées le 18/11/2026 à 18:05 par `scripts/answer_questions.py`, **sans auc
 | q44 | À partir de quelle date devrons-nous respecter les obligations sur les systèmes d'IA à haut risque utilisés pour le recrutement ? | 4/4 | abstention | Contrôle de pertinence : les extraits retenus ne répondent pas directement à la question. La réponse du modèle n'est pas affichée ; consultez les passages ci-dessous ou reformulez la question. | 27 s |
 | h06 | Quelles mentions obligatoires doivent figurer sur une facture ? | 0/0 | oui | — | 50 s |
 | h07 | Comment demander une subvention à la mairie pour notre association ? | 0/0 | oui | — | 41 s |
+| h08 | Quelles sont les règles pour embaucher un apprenti dans une PME ? | 0/0 | oui | — | 43 s |
 
 ## q28 — Un adhérent nous signale que son adresse et sa date de naissance sont fausses dans notre fichier : devons-nous les corriger, et dans quel délai ?
 
@@ -1021,3 +1022,44 @@ RÉPONSE : Les textes trouvés ne permettent pas de répondre à cette question.
 Reformulation de la question (termes ajoutés avant la recherche) : subvention publique ; association d'intérêt général ; demande de subvention ; convention de subvention ; contrôle de l'emploi des fonds ; transparence financière
 
 Temps : recherche 38.8 s · génération 0.6 s (2021 tokens lus, 25 écrits, 453.7 tokens/s) · reformulation 1.5 s
+
+## h08 — Quelles sont les règles pour embaucher un apprenti dans une PME ?
+
+Question hors sujet : aucun article attendu, le copilote devrait refuser.
+
+### Réponse du copilote
+
+> Les textes trouvés ne permettent pas de répondre à cette question.
+
+### Extraits, sources, contrôles et avertissement (ajoutés par le code)
+
+```text
+Sources citées :
+  aucune
+Passages consultés mais non cités :
+  [1] RGPD — règlement (UE) 2016/679, article 47, paragraphe 3 : Règles d'entreprise contraignantes
+      https://eur-lex.europa.eu/legal-content/FR/TXT/?uri=CELEX:02016R0679-20160504#art_47
+  [2] RGPD — règlement (UE) 2016/679, article 47, paragraphe 1 : Règles d'entreprise contraignantes
+      https://eur-lex.europa.eu/legal-content/FR/TXT/?uri=CELEX:02016R0679-20160504#art_47
+  [3] RGPD — règlement (UE) 2016/679, article 28, paragraphe 2 : Sous-traitant
+      https://eur-lex.europa.eu/legal-content/FR/TXT/?uri=CELEX:02016R0679-20160504#art_28
+  [4] RGPD — règlement (UE) 2016/679, article 28, paragraphe 1 : Sous-traitant
+      https://eur-lex.europa.eu/legal-content/FR/TXT/?uri=CELEX:02016R0679-20160504#art_28
+  [5] RGPD — règlement (UE) 2016/679, article 47, paragraphe 2, points a) à k) : Règles d'entreprise contraignantes
+      https://eur-lex.europa.eu/legal-content/FR/TXT/?uri=CELEX:02016R0679-20160504#art_47
+
+Information, pas un conseil juridique : vérifiez les textes officiels cités et, en cas de doute, demandez l'avis d'un professionnel ou de la CNIL.
+```
+
+<details><summary>Texte brut écrit par le modèle (extraits compris)</summary>
+
+```text
+EXTRAITS : aucun
+RÉPONSE : Les textes trouvés ne permettent pas de répondre à cette question.
+```
+
+</details>
+
+Reformulation de la question (termes ajoutés avant la recherche) : contrat d'apprentissage ; entreprise de taille intermédiaire ; jeune travailleur ; période d'essai ; formation professionnelle ; convention de formation
+
+Temps : recherche 42.1 s · génération 0.4 s (2556 tokens lus, 25 écrits, 455.0 tokens/s) · reformulation 0.6 s

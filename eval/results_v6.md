@@ -116,28 +116,50 @@ Temps de la nouvelle configuration : reformulation locale **3,3 s médian** (max
 
 Le juge local s'abstient toujours avec l'article attendu dans les passages (q10, q18, q34, a02).
 
-### 4.2 Distant (`qwen/qwen3.8-27b`) : 51 réponses sur 58, la suite demain
+### 4.2 Distant (`qwen/qwen3.8-27b`) : 58 réponses sur 58, produites sur deux jours
 
-`eval/answers_v6_remote.md` (v0 + 2 hors sujet, 12 réponses), `answers_v6_remote_v1.md` (20) et `answers_v6_remote_v2.md` (19 sur 20) ; 18/11/2026 à partir de 16:49, sur secteur. **Arrêté par le quota du jour de Groq** (200 000 tokens sur 24 heures glissantes ; la reformulation et les mesures de la section 2 en avaient déjà consommé une partie), puis repris par petits lots ; arrêté volontairement à 18:05 avec l'accord de l'auteur. **Restent à générer demain** avec `--resume` : **h08** (v2) et **les 6 questions de l'auteur** (`answers_v6_remote_author.md`). Le modèle étant en preview, les réponses distantes auront été produites sur deux jours.
+`eval/answers_v6_remote.md` (v0 + 2 hors sujet), `answers_v6_remote_v1.md`, `answers_v6_remote_v2.md`, `answers_v6_remote_author.md`. **51 réponses le 18/11/2026** (à partir de 16:49 ; arrêt par le quota du jour de Groq, 200 000 tokens sur 24 heures glissantes, puis petits lots, arrêt volontaire à 18:05 avec l'accord de l'auteur) et **7 réponses le 19/11/2026** de 10:46 à 10:50 (h08 avec `--resume`, puis les 6 questions de l'auteur) ; **sur secteur** les deux jours (`BatteryStatus` = 2 avant et après). Le modèle étant en preview, il a pu changer entre les deux jours.
 
-Mesures du code, comparées à la configuration actuelle en mode distant (`answers_v4_big_qwen27b.md` et `answers_heldout_v4_big_qwen27b.md` pour v0 et v1, `answers_final_remote_v2.md` pour v2) :
+Mesures du code (`compare_answers.py`), comparées aux réponses de la configuration actuelle en mode distant (`answers_v4_big_qwen27b.md` et `answers_heldout_v4_big_qwen27b.md` pour v0 et v1, `answers_final_remote_v2.md` et `answers_final_remote_author.md` pour v2 et l'auteur) :
 
-| Distant | Configuration actuelle | Reformulation + reranker |
+| Distant, 58 questions | Configuration actuelle | Reformulation + reranker |
 |---|---|---|
-| v0 + v1 (32 questions) : réponses données | 26 / 27 | 27 / 27 |
-| v0 + v1 : abstentions | 1 | 0 |
-| v0 + v1 : extraits vérifiés / recopiés | 137 / 139 | 125 / 130 |
-| v0 + v1 : réponses avec alerte | 8 / 32 | 9 / 32 |
-| v2 (17 questions + hors sujet) : réponses données | 11 / 17 | **14 / 17** |
-| v2 : abstentions | 2 | 2 |
-| v2 : extraits vérifiés / recopiés | 52 / 54 | 68 / 75 |
-| Temps total par question (médian) | 4 s | **30 s** (recherche avec reranker sur le processeur) |
+| Réponses données (sur 49) | 37 | **41** |
+| Abstentions du juge | 7 | 7 |
+| Refus faute d'extrait vérifié | 5 (q34, q37, q38, q44, a02) | 1 (q38) |
+| Hors sujet refusés | 9 / 9 | 9 / 9 |
+| Extraits vérifiés / recopiés | 203 / 207 | 213 / 225 |
+| Réponses avec alerte | 16 / 58 | 22 / 58 |
+| Alertes au total | 17 | 27 |
+| Temps total par question : médian · max | 4 s · 38 s | **30 s · 50 s** |
+| Questions au-delà de 60 s | 0 | 0 |
 
-En mode distant, le reranker tourne toujours sur l'ordinateur : il fait passer une question de 4 s à environ 30 s.
+En mode distant, le reranker tourne toujours sur l'ordinateur : il fait passer une question de 4 s à environ 30 s. Les alertes en plus viennent surtout de textes entre « » introuvables dans les extraits (4 → 7 réponses) et d'extraits non retrouvés mot pour mot (3 → 5).
+
+**Ce qui change dans les réponses affichées** (lecture des fichiers, pas un verdict ; « présent » = l'article attendu est parmi les 5 passages) :
+
+| Question | Configuration actuelle | Reformulation + reranker |
+|---|---|---|
+| q24 émotions des salariés | abstention, absent | **réponse, présent** |
+| q29 exactitude contestée | abstention, absent | **réponse, présent** |
+| q34 caméras | refus (aucun extrait vérifié), absent | **réponse, présent** (3 alertes) |
+| q36 plainte à la CNIL | réponse, absent | réponse, **présent** |
+| q37 réparation après une fuite | refus, absent | **réponse, présent** |
+| q42 explication d'un refus par une IA | abstention, absent | **réponse, présent** |
+| q38 casier judiciaire des bénévoles | refus, absent | refus, **présent** (*) |
+| q33 fichier de prospects acheté | réponse, présent | **abstention, absent** |
+| q44 date des obligations à haut risque | refus, absent | abstention, absent |
+| a02 vente du fichier clients | refus, absent | abstention, absent |
+| a01, a03, a04, a05 | abstention, absent | abstention, absent (inchangé) |
+
+(*) q38 : l'art. 10 est au passage [1], mais le modèle a recopié ses extraits entre crochets chinois « 「 » et avec une faute (« autoriture ») : aucun extrait n'est vérifié, la réponse est remplacée par un refus. Observé, non corrigé (même famille que les caractères ajoutés par gpt-oss à la séance 7).
+
+**Questions de l'auteur en distant** : l'article attendu manque dans les 5 cas, comme dans les mesures de la section 2 (e') : 0/5) ; le juge s'abstient sur les 5, sans danger. La reformulation distante ajoute des termes généraux (« consentement », « responsable du traitement », « sous-traitant ») qui ne mènent pas aux art. 6 et 9 ; en local, a02 et a05 trouvaient l'article.
 
 ## 5. Décision : en attente de la relecture de l'auteur
 
 - **Recherche** : la configuration « reformulation + reranker » passe la règle (42–43/49 en local, 42/49 en distant, contre 36/49 ; aucun recul sur aucun jeu). La reformulation seule ne la passe pas.
-- **Réponses** : à relire selon `eval/rubric.md` pour la seconde partie de la règle (**aucune réponse dangereuse créée**) : les 58 réponses locales et, une fois complétées, les 58 réponses distantes (56 questions changent de passages).
+- **Réponses** : à relire selon `eval/rubric.md` pour la seconde partie de la règle (**aucune réponse dangereuse créée**) : les 58 réponses locales et les 58 réponses distantes (56 questions changent de passages). À regarder en premier : les réponses nouvelles (local q24, q29, q37, q42, a03 ; distant q24, q29, q34, q37, q42) et q36, a05 (article désormais présent).
+- **Mesures du code** : réponses données 36 → 38 sur 49 en local et 37 → 41 en distant ; hors sujet refusés 9/9 dans les deux modes.
 - **Coût** : une question locale passe de 44 s à 74 s médian (45 sur 58 au-delà de 60 s) ; en distant, de 4 s à 30 s.
 - **En attendant**, `SEARCH_REWRITE` et `SEARCH_RERANK` restent **désactivés par défaut** ; le lexique en mots entiers est actif (correction d'un défaut).
