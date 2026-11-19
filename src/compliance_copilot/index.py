@@ -208,6 +208,7 @@ def search(
     first_paragraph: bool = False,
     reranker=None,
     rerank_candidates: int = 20,
+    extra_terms: list[str] | None = None,
 ) -> list[SearchResult]:
     """The k chunks closest to the question, best first.
 
@@ -217,7 +218,8 @@ def search(
     adds the first paragraph of an article when a later one is kept (see with_first_paragraphs).
     The score is always the cosine similarity between the question and the chunk. With a reranker
     (compliance_copilot.rerank), the rerank_candidates best chunks of the vector search are reordered by its
-    scores (kept in rerank_score) before the per-article limit and the first paragraphs.
+    scores (kept in rerank_score) before the per-article limit and the first paragraphs. extra_terms (query
+    rewriting, compliance_copilot.rewrite) are added to the question like the lexicon additions.
     """
     if mode not in SEARCH_MODES or lexicon not in LEXICON_TARGETS:
         raise ValueError(f"mode doit valoir {SEARCH_MODES} et lexicon {LEXICON_TARGETS}")
@@ -229,8 +231,10 @@ def search(
             f"L'index a été construit avec le modèle {manifest['embedding_model']}, mais .env demande "
             f"{embedder.model} : relancez scripts\\build_index.py."
         )
-    expanded = expand_query(question) if lexicon != "off" else question
-    vector = embedder.embed([expanded if lexicon == "all" else question])[0]
+    terms = f" ({' ; '.join(extra_terms)})" if extra_terms else ""  # query rewriting (compliance_copilot.rewrite)
+    expanded = (expand_query(question) if lexicon != "off" else question) + terms
+    semantic = (expand_query(question) if lexicon == "all" else question) + terms
+    vector = embedder.embed([semantic])[0]
     collection = open_collection(index_dir)
 
     rerank_scores: dict[str, float] = {}
@@ -245,7 +249,7 @@ def search(
             head = ranked[:rerank_candidates]
             texts = collection.get(ids=head, include=["documents"])
             by_id = dict(zip(texts["ids"], texts["documents"]))
-            rerank_scores = dict(zip(head, reranker.score(expanded if lexicon == "all" else question, [by_id[i] for i in head])))
+            rerank_scores = dict(zip(head, reranker.score(semantic, [by_id[i] for i in head])))
             ranked = sorted(head, key=lambda i: rerank_scores[i], reverse=True) + ranked[rerank_candidates:]
     else:
         distances = {}

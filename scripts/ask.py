@@ -78,7 +78,7 @@ def main() -> int:
             question, INDEX_DIR, embedder, chat_model, k=args.k or settings.search_k, on_text=write_now,
             mode=settings.search_mode, lexicon=settings.search_lexicon, max_per_article=settings.search_max_per_article,
             first_paragraph=settings.search_first_paragraph,
-            reranker=make_reranker(settings), rerank_candidates=settings.search_rerank_candidates,
+            reranker=make_reranker(settings), rerank_candidates=settings.search_rerank_candidates, rewrite=settings.search_rewrite,
             judge=settings.answer_judge,
         )
     except PersonalDataError as refusal:  # raised by the core before the search and before anything is sent
@@ -97,6 +97,8 @@ def main() -> int:
             print(f"\n[{number}] (score {passage.score:.3f}) {passage_label(passage.metadata)}")
             print(passage.text.split("\n\n", 1)[-1])
         print()
+    if answer.rewrite_terms:
+        print(f"Reformulation de la question : {' ; '.join(answer.rewrite_terms)}\n")
     print(render_footer(answer))
     print(f"\n{signature(settings)}")
     generation = answer.generation
@@ -104,7 +106,8 @@ def main() -> int:
         f"\nTemps : recherche {answer.search_seconds:.1f} s · génération {answer.generation_seconds:.1f} s "
         f"({generation.completion_tokens} tokens, {generation.tokens_per_second:.1f} tokens/s) · "
         + (f"contrôle de pertinence {answer.judge_seconds:.1f} s · " if settings.answer_judge else "")
-        + f"total {answer.search_seconds + answer.generation_seconds + answer.judge_seconds:.1f} s"
+        + (f"reformulation {answer.rewrite_seconds:.1f} s · " if answer.rewrite_seconds else "")
+        + f"total {answer.rewrite_seconds + answer.search_seconds + answer.generation_seconds + answer.judge_seconds:.1f} s"
         + (f" · attente des limites de l'API {answer.wait_seconds:.0f} s (non comptée)" if answer.wait_seconds else "")
     )
     return 0

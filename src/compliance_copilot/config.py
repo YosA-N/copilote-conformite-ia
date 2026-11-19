@@ -39,6 +39,7 @@ class Settings:
     search_first_paragraph: bool = True  # add the first paragraph of an article when a later one is kept (session 6)
     search_rerank: bool = False  # cross-encoder reranker on the candidates (optional, needs torch: session 7 bis)
     search_rerank_candidates: int = 20  # candidates of the vector search given to the reranker
+    search_rewrite: bool = False  # the language model adds the legal wording of the question before the search (session 7 ter)
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     answer_judge: bool = True  # second short call: do the verified extracts answer the question directly?
     llm_backend: str = "ollama"  # "ollama" (local, the default) or "openai" (an OpenAI-compatible API: the remote mode)
@@ -83,6 +84,7 @@ def load_settings() -> Settings:
         search_first_paragraph=os.getenv("SEARCH_FIRST_PARAGRAPH", "on").strip().lower() in {"on", "1", "true", "oui"},
         search_rerank=os.getenv("SEARCH_RERANK", "off").strip().lower() in {"on", "1", "true", "oui"},
         search_rerank_candidates=int(os.getenv("SEARCH_RERANK_CANDIDATES", "20")),
+        search_rewrite=os.getenv("SEARCH_REWRITE", "off").strip().lower() in {"on", "1", "true", "oui"},
         reranker_model=os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3").strip(),
         answer_judge=os.getenv("ANSWER_JUDGE", "on").strip().lower() in {"on", "1", "true", "oui"},
         llm_backend=os.getenv("LLM_BACKEND", "ollama").strip().lower(),

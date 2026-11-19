@@ -12,7 +12,9 @@ import sys
 from compliance_copilot.config import INDEX_DIR, load_settings
 from compliance_copilot.embeddings import EmbeddingError, make_embedder
 from compliance_copilot.index import IndexNotReadyError, SearchResult, search
+from compliance_copilot.llm import LLMError, make_chat_model
 from compliance_copilot.rerank import RerankerError, make_reranker
+from compliance_copilot.rewrite import rewrite_terms
 
 EXCERPT_CHARS = 160
 
@@ -41,12 +43,15 @@ def main() -> int:
     settings = load_settings()
     embedder = make_embedder(settings, settings.query_embedding_device)
     try:
+        terms = rewrite_terms(question, make_chat_model(settings)) if settings.search_rewrite else None
+        if terms is not None:
+            print(f"Reformulation de la question : {' ; '.join(terms) or '(aucun terme retenu)'}\n")
         results = search(
             question, INDEX_DIR, embedder, k=args.k or settings.search_k, mode=settings.search_mode, lexicon=settings.search_lexicon,
             max_per_article=settings.search_max_per_article, first_paragraph=settings.search_first_paragraph,
-            reranker=make_reranker(settings), rerank_candidates=settings.search_rerank_candidates,
+            reranker=make_reranker(settings), rerank_candidates=settings.search_rerank_candidates, extra_terms=terms,
         )
-    except (IndexNotReadyError, EmbeddingError, RerankerError) as error:
+    except (IndexNotReadyError, EmbeddingError, RerankerError, LLMError) as error:
         print(f"[ERREUR] {error}")
         return 1
 
