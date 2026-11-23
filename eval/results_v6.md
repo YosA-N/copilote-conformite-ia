@@ -217,3 +217,48 @@ Remesure de e') en distant (`compare_retrieval.py --configs current,rw_remote_re
 Au niveau paragraphe : 43/49 (ancien exemple 41/49, actuelle 35/49). Aucun recul par rapport à la configuration actuelle. Les deux questions gagnées : **q33** entre de justesse (rang 5 ; ancien exemple 6–10) et **a05** (rang 3 ; ancien exemple hors des 5). q44, a01 et a04 restent hors des 20 premiers.
 
 **Prudence** : la reformulation est instable d'une passe à l'autre (section 3). Pour séparer l'effet de l'exemple de cette instabilité, les 58 questions ont été recherchées une fois avec chaque exemple, le même jour, et comparées aux passages des réponses relues (`answers_v6_remote*.md`) : **29 questions sur 58 changent de passages avec le nouvel exemple, 15 sur 58 avec l'ancien exemple rejoué**. Une partie des changements (et peut-être du +2) vient donc de l'instabilité, pas de l'exemple.
+
+### 6.4 Les 29 questions régénérées en distant avec le nouvel exemple
+
+`eval/answers_v6b_remote.md` (q06, q07, h01), `answers_v6b_remote_v1.md` (11), `answers_v6b_remote_v2.md` (11), `answers_v6b_remote_author.md` (4), produites avec `answer_questions.py --ids` et les réglages par défaut (`auto` : reformulation + reranker en mode distant). **Sur deux dates à cause du quota Groq** : 18 réponses le 19/11/2026 (12:56 à 13:32), 11 le 23/11/2026 (15:07 à 15:14), sur secteur les deux fois (`BatteryStatus` = 2). Le modèle étant en preview, il a pu changer entre les deux dates. Les fichiers v6 relus ne sont pas modifiés.
+
+Comparaison avec les réponses relues (lecture des fichiers, pas un verdict) :
+
+| Question | Verdict de l'ancienne réponse | Ancienne : statut, article | Nouvelle : statut, article | Extraits vérifiés (ancienne → nouvelle) |
+|---|---|---|---|---|
+| q06 | partiel | réponse, présent | réponse, présent | 6/6 → 6/6 |
+| q07 | juste | réponse, présent | réponse, présent | 5/5 → 6/6 |
+| h01 | juste | refus, - | refus, - | 0/0 → 0/0 |
+| q13 | juste | réponse, présent | réponse, présent | 4/4 → 4/4 |
+| q14 | juste | réponse, présent | réponse, présent | 5/5 → 6/6 |
+| q15 | juste | réponse, présent | réponse, présent | 6/6 → 6/6 |
+| q16 | juste | réponse, présent | réponse, présent | 6/6 → 6/6 |
+| q18 | juste | réponse, présent | réponse, présent | 6/6 → 6/6 |
+| q20 | juste | réponse, présent | réponse, présent | 3/3 → 3/3 |
+| q22 | partiel | réponse, présent | réponse, présent | 2/2 → 3/3 |
+| q23 | partiel | réponse, présent | réponse, présent | 6/6 → 4/6 |
+| q24 | juste | réponse, présent | réponse, présent | 4/4 → 3/3 |
+| q25 | faux | réponse, présent | réponse, présent | 1/1 → 1/1 |
+| h05 | juste | refus, - | refus, - | 0/0 → 0/0 |
+| q30 | juste | réponse, présent | réponse, présent | 4/4 → 4/6 |
+| q33 | faux | abstention, absent | abstention, absent | 6/6 → 6/6 |
+| q34 | partiel | réponse, présent | réponse, présent | 4/6 → 6/6 |
+| q36 | juste | réponse, présent | réponse, présent | 4/4 → 6/6 |
+| q38 | faux | refus, présent | réponse, présent | 0/3 → 2/2 |
+| q39 | juste | réponse, présent | réponse, présent | 2/2 → 2/2 |
+| q42 | juste | réponse, présent | réponse, présent | 3/3 → 3/3 |
+| q43 | juste | réponse, présent | réponse, présent | 6/6 → 6/6 |
+| q44 | faux | abstention, absent | abstention, absent | 4/4 → 2/2 |
+| h06 | juste | refus, - | refus, - | 0/0 → 0/0 |
+| h08 | juste | refus, - | refus, - | 0/0 → 0/0 |
+| a02 | faux | abstention, absent | abstention, absent | 6/6 → 4/4 |
+| a03 | faux | abstention, absent | réponse, absent | 6/6 → 6/6 |
+| a05 | faux | abstention, absent | abstention, absent | 5/5 → 6/6 |
+| ha01 | juste | refus, - | refus, - | 0/0 → 0/0 |
+
+**Ce que montrent ces 29 réponses** :
+
+- **Article attendu présent** : exactement les mêmes questions qu'avant. Les deux gains de la remesure (q33 au rang 5, a05 au rang 3) ne se retrouvent pas ici : la reformulation a donné d'autres termes, et q33 et a05 restent des abstentions sans l'article. Le +2 de la section 6.3 n'est donc pas confirmé sur les réponses.
+- **Réponses données** : 20 sur 24 (avant 18) ; hors sujet refusés 5 sur 5.
+- **q38** (« faux » : refus faute d'extrait vérifié) **répond maintenant** avec l'art. 10 au passage [1] et 2 extraits vérifiés : effet attendu de la correction des crochets, mais ici le modèle n'en a pas écrit.
+- **a03 répond maintenant, sans l'article attendu** (annexe III, point 4 et art. 26 absents ; mêmes deux premiers passages qu'avant, art. 13 et art. 27 : c'est le juge qui dit OUI cette fois, au lieu de NON). La réponse dit qu'il faut, « si ce logiciel est bien un système d'IA à haut risque et que vous en êtes le déployeur », effectuer l'analyse d'impact sur les droits fondamentaux de l'art. 27, sans dire qu'elle ne vise que certains déployeurs (organismes publics, services publics, annexe III, points 5 b et c), alors que l'extrait vérifié le dit ; c'est **la même erreur que q07 en local, relue « dangereuse »**. Elle présente aussi la notice d'utilisation (art. 13, obligation du fournisseur) comme un point à vérifier par l'utilisateur. Le code a signalé deux textes entre « » introuvables dans les extraits, pas l'erreur sur les déployeurs visés. **À relire en premier.**
