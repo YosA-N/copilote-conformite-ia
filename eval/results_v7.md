@@ -121,3 +121,109 @@ Ces écarts sont **un effet de l'exemple, pas seulement du hasard** : les termes
 - Recherche : hit@1 et hit@5, niveaux article et paragraphe, 3 mesures (`compare_retrieval.py --sets exam2 --configs current,rw_remote_rerank --repeat 3`) : configuration locale et configuration distante.
 - Réponses : **chaque question posée 3 fois par mode** (`answer_questions.py --questions eval\questions_exam2.jsonl --version exam2_local_1` à `_3`, et `--backend openai --version exam2_remote_1` à `_3`), relues par l'auteur selon `eval/rubric.md` ; verdicts comptés en moyenne, avec le nombre de questions qui ont reçu au moins une réponse dangereuse ; résultats donnés aussi à part pour les 6 sujets nouveaux (e04, e05, e10, e12, e23, e25).
 - Sur secteur (`BatteryStatus` = 2 avant et après) ; le quota de Groq (200 000 tokens par jour) impose environ une passe distante par jour, reprise avec `--resume` si besoin.
+
+## 5. Recherche sur l'examen (24/11/2026, 3 mesures)
+
+`compare_retrieval.py --sets exam2 --configs current,rw_remote_rerank --repeat 3`, configuration figée (`exam2-config`), sur secteur avant et après. 24 questions avec article attendu ; « a–b » = résultat variable d'une mesure à l'autre.
+
+| Configuration | hit@1 article | hit@5 article | hit@1 paragraphe | hit@5 paragraphe |
+|---|---|---|---|---|
+| Locale (lexique + 2 par article + 1er paragraphe) | 13/24 | **15/24** | 11/24 | 14/24 |
+| Distante (+ reformulation + reranker) | 15–16/24 | **19–20/24** | 14–15/24 | 18–19/24 |
+
+Pour situer : sur les 49 questions de réglage, hit@5 article locale 36/49 (73 %), distante 41–42/49 (84–86 %) ; sur l'examen, locale 63 %, distante 79–83 %.
+
+**Sujets déjà vus et sujets nouveaux** (hit@5 article ; plages calculées question par question à partir des rangs des 3 mesures) :
+
+| | 19 questions sur un sujet de réglage | 5 sujets nouveaux avec article attendu (e04, e10, e12, e23, e25) |
+|---|---|---|
+| Locale | 15/19 | **0/5** |
+| Distante | 16–18/19 | **2–3/5** (e10, e25 ; e12 variable) |
+
+Rang du premier article attendu, puis du paragraphe précisé s'il diffère (— = pas dans les 20 premiers) :
+
+| Question | Locale | Distante |
+|---|---|---|
+| e01 | — (§ —) | 9 (§ 9) |
+| e02 | 1 | 1 |
+| e03 | 15 | 1 |
+| e04 (nouveau) | — (§ —) | — (§ —) |
+| e06 | 1 | 1 |
+| e07 | 1 (§ —) | 1 (§ 3–4) |
+| e08 | 1 (§ 1) | 1 (§ 1) |
+| e09 | 1 (§ 1) | 1 (§ 1) |
+| e10 (nouveau) | — (§ —) | 3 (§ 11) |
+| e11 | 2 (§ 3) | 1–2 (§ 1–2) |
+| e12 (nouveau) | — (§ —) | 2–— (§ 2–—) |
+| e13 | — (§ —) | 1 (§ 1) |
+| e14 | 1 | 1 |
+| e15 | 1 (§ 1) | 1 (§ 1) |
+| e16 | 1 (§ 2) | 4–8 (§ 7–9) |
+| e17 | 3 | 3 |
+| e18 | 1 (§ 1) | 1 (§ 1) |
+| e19 | 1 | 1 |
+| e20 | 1 | 1 |
+| e21 | 1 (§ 1) | 1 (§ 1) |
+| e22 | — (§ —) | 2–— (§ 2–—) |
+| e23 (nouveau) | — | — |
+| e24 | 1 | 1 |
+| e25 (nouveau) | — | 1 |
+
+Observations (notées, **pas corrigées** : configuration figée) :
+
+- e04 (fichier partagé chez un hébergeur : art. 32 et 28, § 1) et e23 (responsabilité : RGPD art. 82, AI Act art. 26) : aucun article attendu dans les 20 premiers, dans les deux configurations.
+- e16 recule en distant (rang 1 → 4 à 8) : la reformulation propose aux 3 mesures « modèle de fondation » et « utilisateur déployant ». « Modèle de fondation » n'apparaît pas une seule fois dans le corpus (le texte dit « modèle d'IA à usage général ») ; même terme pour e23.
+- Reformulation : termes identiques aux 3 mesures pour 4 questions sur 24 seulement (instabilité déjà connue, `results_v6.md`, section 6).
+- e12 (géolocalisation, sujet de l'ancien exemple du prompt de reformulation) : introuvable en local, variable en distant.
+
+## 6. Réponses : mesures du code (provisoire, 24/11/2026)
+
+Passes faites le 24/11/2026, sur secteur du début à la fin (`BatteryStatus` = 2 avant chaque passe) : `exam2_local_1` à `_3` (14:47 à 15:51) et `exam2_remote_1` (15:51 à 16:13, sans arrêt dû au quota). Passes distantes 2 et 3 à venir. **Mesures du code, pas des verdicts** : la relecture de l'auteur viendra après les 6 passes.
+
+| Série | Réponses données (24) | Abstentions du juge | Refus (aucun extrait vérifié) | e05 et hors sujet refusés | Extraits vérifiés / recopiés | Réponses avec alerte | Réponses coupées | Total : médian · max |
+|---|---|---|---|---|---|---|---|---|
+| local_1 | 11 | 11 | 2 | 4/4 | 69/80 | 20/28 | 1 (e01) | 44 s · 196 s |
+| local_2 | 11 | 11 | 2 | 4/4 | 72/82 | 19/28 | 1 (e01) | 43 s · 75 s |
+| local_3 | 10 | 11 | 3 | 4/4 | 77/84 | 19/28 | 1 (e17) | 44 s · 83 s |
+| remote_1 | 13 | 10 | 1 | 4/4 | 118/120 | 14/28 | 0 | 29 s · 61 s |
+
+- « e05 et hors sujet refusés » : e05 (bandeau cookies, directive 2002/58/CE hors corpus) n'a pas d'article attendu et est compté avec he01 à he03 par `compare_answers.py`.
+- Temps distant : génération 2 s médiane ; 487 s d'attente du quota par minute sur 17 questions, non comptées.
+
+**Article attendu (paragraphe précisé) parmi les passages donnés au modèle, et statut de la réponse** (R = réponse, A = abstention du juge, X = refus ; + article présent, − absent) :
+
+| # | local_1 | local_2 | local_3 | remote_1 |
+|---|---|---|---|---|
+| e01 | A− | A− | A− | A− |
+| e02 | R+ | R+ | R+ | R+ |
+| e03 | X− | X− | X− | A+ |
+| e04 (nouveau) | A− | A− | A− | A− |
+| e05 (nouveau) | A | A | A | X |
+| e06 | R+ | R+ | R+ | R+ |
+| e07 | R− | R− | R− | R+ |
+| e08 | A+ | A+ | A+ | A+ |
+| e09 | R+ | R+ | R+ | R+ |
+| e10 (nouveau) | A− | A− | A− | X− |
+| e11 | R+ | R+ | A+ | A+ |
+| e12 (nouveau) | X− | X− | X− | A+ |
+| e13 | A− | A− | X− | A+ |
+| e14 | A+ | A+ | A+ | R+ |
+| e15 | R+ | R+ | R+ | R+ |
+| e16 | A+ | A+ | A+ | A− |
+| e17 | R+ | R+ | R+ | R+ |
+| e18 | R+ | R+ | R+ | R+ |
+| e19 | R+ | R+ | R+ | R+ |
+| e20 | A+ | A+ | A+ | R+ |
+| e21 | R+ | R+ | R+ | A+ |
+| e22 | A− | A− | A− | R− |
+| e23 (nouveau) | A− | A− | A− | R− |
+| e24 | R+ | R+ | R+ | R+ |
+| e25 (nouveau) | A− | A− | A− | A+ |
+| he01 à he03 | X | X | X | X |
+
+Observations (notées, pas corrigées) :
+
+- Les 3 passes locales sont presque identiques (même recherche, température 0,1) : seules e11 et e13 changent de statut en local_3.
+- Abstention avec l'article attendu présent : local e08, e14, e16, e20 (aux 3 passes, plus e11 en local_3) ; distant e03, e08, e11, e12, e13, e21, e25 (7 questions). Le juge qui s'abstient avec le bon article était déjà noté à l'examen final (q30, q41).
+- Réponse donnée **sans** l'article attendu : e07 en local (art. 28 présent, mais pas son § 3), e22 et e23 en distant. À l'examen précédent, une réponse sans l'article attendu (a03, v6b) avait été relue « dangereuse ».
+- Sujets nouveaux : une seule réponse donnée sur 24 (e23, distant, sans l'article attendu) ; tout le reste est abstention ou refus.
