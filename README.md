@@ -69,7 +69,7 @@ Deux étapes de recherche supplémentaires, décidées à la séance 7 ter (`eva
 
 **Par défaut** (`SEARCH_REWRITE=auto` et `SEARCH_RERANK=auto`), les deux sont **activés en mode distant** et **désactivés en mode local**. Vous pouvez forcer `on` ou `off` dans `.env`. La reformulation n'est jamais activée seule par défaut : sans le reclassement, elle fait reculer certaines questions.
 
-**Pourquoi en mode distant** : sur les 58 questions de réglage relues par l'auteur, 40 justes, 9 partielles, 9 fausses et **aucune dangereuse**, contre 38, 6, 13 et 1 sans ces étapes ; l'article attendu est trouvé pour 44 questions sur 49 au lieu de 36. Coût : environ 30 s par question au lieu de 4 s (le reclassement tourne sur votre ordinateur), et la question part une fois de plus chez Groq pour la reformulation (après le garde-fou des données personnelles).
+**Pourquoi en mode distant** : l'article attendu est trouvé pour 42 à 44 questions de réglage sur 49 au lieu de 36 (mesuré trois fois, sans recul). Sur les 58 questions relues par l'auteur, une première passe a donné 40 justes, 9 partielles, 9 fausses et aucune dangereuse (contre 38, 6, 13 et 1 sans ces étapes), mais une seconde passe sur 29 d'entre elles a donné 4 réponses dangereuses : **ces étapes améliorent la recherche ; rien ne montre qu'elles réduisent les réponses dangereuses**. Coût : environ 30 s par question au lieu de 4 s (le reclassement tourne sur votre ordinateur), et la question part une fois de plus chez Groq pour la reformulation (après le garde-fou des données personnelles).
 
 **Pourquoi pas en mode local** : avec le petit modèle local, la recherche s'améliore aussi, mais **3 réponses deviennent dangereuses** (30 justes, 7 partielles, 16 fausses, 5 dangereuses, contre 26, 7, 18 et 7), et une question passe de 44 s à 74 s.
 
@@ -141,7 +141,7 @@ Des mesures à lire ensemble : les **questions de réglage** ont servi à régle
 | **Après la séance 7 ter : réglage sur toutes les questions connues** (v0, v1, v2, auteur : 58 questions, dont les 26 de l'examen, vues depuis) — *réglage, pas un examen* | local 36 / 49 · distant 44 / 49 | 26 / 7 / 18 / 7 (¹) | 40 / 9 / 9 / 0 (²) |
 | **Examen final** (questions jamais vues, 26 questions) | **10 / 22** | **9 / 2 / 14 / 1** | **13 / 1 / 11 / 1** |
 
-(¹) Configuration locale inchangée par la séance 7 ter (reformulation et reclassement désactivés en local) : verdicts des mêmes réponses qu'avant. (²) Mode distant avec reformulation et reclassement, relu avec l'ancien exemple du prompt de reformulation ; le hit@5 de 44 / 49 est mesuré avec le nouvel exemple (42 / 49 avec l'ancien).
+(¹) Configuration locale inchangée par la séance 7 ter (reformulation et reclassement désactivés en local) : verdicts des mêmes réponses qu'avant. (²) Mode distant avec reformulation et reclassement, relu avec l'ancien exemple du prompt de reformulation ; le hit@5 de 44 / 49 est mesuré avec le nouvel exemple (42 / 49 avec l'ancien). **Une seconde passe sur 29 de ces questions, avec la même configuration, a donné 4 réponses dangereuses** (contre 0 sur les mêmes questions à la première passe) : les réponses varient d'une passe à l'autre ([`eval/results_v6.md`](eval/results_v6.md), section 6.5).
 
 **Seule la ligne « examen final » porte sur des questions jamais vues**, et elle le restera jusqu'à l'examen 2, sur des questions neuves. La ligne « après la séance 7 ter » mesure des réglages faits en connaissant ces questions : elle est optimiste.
 
@@ -149,6 +149,7 @@ Des mesures à lire ensemble : les **questions de réglage** ont servi à régle
 
 ## Limites connues
 
+- **Les réponses varient d'une passe à l'autre ; des réponses dangereuses restent possibles dans les deux modes** (local et distant). La même question, avec la même configuration, peut recevoir une réponse juste puis une réponse dangereuse (`eval/results_v6.md`, section 6.5) : vérifiez toujours les articles cités.
 - **Petit modèle local** : `qwen3:4b-instruct` (4 milliards de paramètres) tourne sur une carte de 4 Go, mais il se trompe encore. Les relectures humaines (`eval/review_v*.md`) ont trouvé une exception inversée, des cas oubliés dans une liste, une obligation du fournisseur présentée comme celle de l'utilisateur, deux analyses d'impact confondues et des fautes de frappe.
 - **Contrôles automatiques imparfaits** : ils comparent des mots, sans comprendre le sens. Ils laissent passer des erreurs et signalent parfois des phrases justes. Une réponse sans alerte n'est pas une réponse garantie.
 - **Extrait vérifié ≠ bonne réponse** : un extrait vérifié prouve que la phrase existe dans la loi, pas qu'elle répond à la question posée ni qu'elle s'applique à votre situation.

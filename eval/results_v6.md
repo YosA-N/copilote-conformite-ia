@@ -262,3 +262,21 @@ Comparaison avec les réponses relues (lecture des fichiers, pas un verdict) :
 - **Réponses données** : 20 sur 24 (avant 18) ; hors sujet refusés 5 sur 5.
 - **q38** (« faux » : refus faute d'extrait vérifié) **répond maintenant** avec l'art. 10 au passage [1] et 2 extraits vérifiés : effet attendu de la correction des crochets, mais ici le modèle n'en a pas écrit.
 - **a03 répond maintenant, sans l'article attendu** (annexe III, point 4 et art. 26 absents ; mêmes deux premiers passages qu'avant, art. 13 et art. 27 : c'est le juge qui dit OUI cette fois, au lieu de NON). La réponse dit qu'il faut, « si ce logiciel est bien un système d'IA à haut risque et que vous en êtes le déployeur », effectuer l'analyse d'impact sur les droits fondamentaux de l'art. 27, sans dire qu'elle ne vise que certains déployeurs (organismes publics, services publics, annexe III, points 5 b et c), alors que l'extrait vérifié le dit ; c'est **la même erreur que q07 en local, relue « dangereuse »**. Elle présente aussi la notice d'utilisation (art. 13, obligation du fournisseur) comme un point à vérifier par l'utilisateur. Le code a signalé deux textes entre « » introuvables dans les extraits, pas l'erreur sur les déployeurs visés. **À relire en premier.**
+
+### 6.5 Variabilité des réponses
+
+Relecture de l'auteur des 29 réponses régénérées (`eval/reviews/v6b_remote*.jsonl`, `review_summary.py --check` : 29 relectures cohérentes) :
+
+| Les mêmes 29 questions, mode distant (juste / partiel / faux / dangereux) | Verdicts |
+|---|---|
+| v6 (ancien exemple, relue le 19/11) | 18 / 4 / 7 / 0 |
+| **v6b (nouvel exemple, seconde passe)** | **18 / 3 / 4 / 4** |
+
+Verdicts qui changent : q06 (partiel → juste) et q38 (faux → juste, grâce à la tolérance des crochets) ; **q14** (juste → dangereux : opposition à la prospection rattachée à la « situation particulière » de l'art. 21, § 1), **q25** (faux → dangereux : « peut faire preuve » lu comme une condition exigée, un logiciel non adaptatif « ne relève pas » de la définition), **q39** (juste → dangereux : des données pseudonymisées présentées comme plus personnelles), **a03** (faux → dangereux : analyse d'impact de l'art. 27 imposée à tout déployeur).
+
+**Ce que cela montre** :
+
+- **Même configuration, mêmes articles présents, mais 4 réponses dangereuses en v6b contre 0 sur les mêmes questions en v6.** Le « 0 dangereuse » du mode distant en v6 (section 5) dépendait donc en partie du hasard : modèle en preview, réponses non déterministes (température 0,1, et le juge peut basculer), reformulation instable.
+- **Les erreurs dangereuses viennent de la rédaction, pas de la recherche**, et reviennent sur les mêmes pièges que les versions précédentes : la pseudonymisation (q39, déjà dangereuse à l'examen final), « peut » lu comme « doit » (q25), le champ de l'analyse d'impact de l'art. 27 (a03, comme q07 en local), l'opposition à la prospection (q14, comme v4 et v4 avec reranker).
+- **Décision maintenue : `auto` en mode distant**, justifiée par le **gain de recherche mesuré trois fois** (hit@5 article de 36 à 42–44 sur 49, sans recul sur aucun jeu), **sans prétendre que la reformulation et le reranker réduisent les réponses dangereuses** : ces chiffres ne permettent pas de le dire.
+- **Leçon de méthode** : **une seule passe ne suffit pas pour comparer des réponses générées.** Les comparaisons des séances précédentes (une passe par configuration) sont à lire avec cette réserve. **L'examen 2 posera chaque question plusieurs fois** (3 fois par mode), et les verdicts seront comptés en moyenne.
