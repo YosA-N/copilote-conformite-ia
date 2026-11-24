@@ -50,7 +50,7 @@ Total : 24 questions avec article attendu (15 sur le RGPD, dont e25 ; 8 sur l'AI
 
 ## 3. Points à trancher avant l'examen
 
-1. **L'exemple du prompt de reformulation correspond à e12.** Le 19/11/2026, à la séance 7 ter, l'exemple « empreinte digitale → données biométriques » a été remplacé parce qu'il correspondait à la question a01. Il est devenu **« géolocalisation des véhicules → données de localisation »**, choisi sans connaître ces questions (elles étaient hors du dépôt). Or **e12 demande : « Je peux suivre les véhicules de mes techniciens par GPS ? »**. En mode distant, où la reformulation est activée par défaut, e12 serait favorisée par un exemple qui lui correspond. Aucun réglage n'a été changé. **Décision de l'auteur attendue (articles attendus validés, ce point reste ouvert)** : remplacer l'exemple avant l'examen (par un exemple sans rapport avec les 86 questions connues (58 de réglage et 28 de l'examen 2), puis remesurer la recherche sur les jeux de réglage), ou le garder et signaler e12 comme biaisée.
+1. **L'exemple du prompt de reformulation correspond à e12.** Le 19/11/2026, à la séance 7 ter, l'exemple « empreinte digitale → données biométriques » a été remplacé parce qu'il correspondait à la question a01. Il est devenu **« géolocalisation des véhicules → données de localisation »**, choisi sans connaître ces questions (elles étaient hors du dépôt). Or **e12 demande : « Je peux suivre les véhicules de mes techniciens par GPS ? »**. En mode distant, où la reformulation est activée par défaut, e12 serait favorisée par un exemple qui lui correspond. **Décision de l'auteur (24/11/2026) : remplacer l'exemple** (section 3 bis). Choix qui se posait : remplacer l'exemple avant l'examen (par un exemple sans rapport avec les 86 questions connues (58 de réglage et 28 de l'examen 2), puis remesurer la recherche sur les jeux de réglage), ou le garder et signaler e12 comme biaisée.
 2. **La plupart des sujets ont déjà servi au réglage.** Les questions sont neuves dans leur formulation, mais environ 19 des 25 reprennent le sujet et l'article attendu d'une question de réglage :
 
    | Examen 2 | Question de réglage sur le même sujet |
@@ -75,6 +75,29 @@ Total : 24 questions avec article attendu (15 sur le RGPD, dont e25 ; 8 sur l'AI
    | e24 dates d'application | q44 (art. 113) |
 
    Sujets vraiment nouveaux : e04 (Google Drive), e05 (cookies), e10 (boîte mail d'un salarié parti), e12 (GPS), e23 (responsabilité), e25 (ChatGPT et données clients). **Les résultats seront donc optimistes pour les questions qui recoupent le réglage** : il faudra les donner aussi à part (recoupement / sujets nouveaux).
+
+## 3 bis. Remplacement de l'exemple du prompt de reformulation (24/11/2026)
+
+**Nouvel exemple, choisi par l'auteur parmi trois propositions** : « logo sur l'emballage d'un appareil » → « marquage CE ». Vérifié contre le texte des 86 questions connues (58 de réglage, 28 de l'examen 2) : aucune ne parle de logo, d'emballage, d'appareil ni de marquage (les seules correspondances venaient du mot courant « ce »). Modifié dans `rewrite.py` et le README ; tests verts.
+
+**Remesure de e') en distant** (`compare_retrieval.py --configs current,rw_remote_rerank --repeat 3`), 24/11/2026, 13:20 à 14:13, sur secteur (`BatteryStatus` = 2 avant et après), sur les 4 jeux de réglage seulement (l'examen 2 n'est pas mesuré) :
+
+| Niveau article | v0 hit@5 | v1 hit@5 | v2 hit@5 | auteur hit@5 | **total hit@5** | total hit@1 |
+|---|---|---|---|---|---|---|
+| a) actuelle (même jour) | 10/10 | 16/17 | 10/17 | 0/5 | 36/49 | 28/49 |
+| e') exemple « empreinte digitale » (18/11) | 10/10 | 17/17 | 15/17 | 0/5 | 42/49 | 38–40/49 |
+| e') exemple « géolocalisation des véhicules » (19/11) | 10/10 | 17/17 | 16/17 | 1/5 | 44/49 | 38–39/49 |
+| **e') exemple « marquage CE » (24/11)** | 10/10 | **16/17** | 14–15/17 | 1–2/5 | **41–42/49** | 38–39/49 |
+
+Au niveau paragraphe : 40–41/49 (actuelle 35/49). **Aucun recul par rapport à la configuration actuelle** : la règle de décision est respectée. Mais c'est un peu moins qu'avec les deux exemples précédents :
+
+- **q24** (émotions des salariés) sort des 20 premiers, dans les 3 passes : la reformulation donne cette fois « analyse des émotions ; système d'IA à haut risque ; employeur ; travailleur ; évaluation d'impact », sans « données biométriques », et l'art. 5 n'est plus trouvé (rang 11 dans la configuration actuelle, 1–2 avec les exemples précédents) ;
+- **q38** (casier judiciaire) passe au rang 17 : « données sensibles » au lieu de « données relatives à des condamnations pénales » ;
+- q33 reste hors des 5 passages ou de justesse (4–9) ; a05 entre de justesse (4–7).
+
+Ces écarts sont **un effet de l'exemple, pas seulement du hasard** : les termes de q24 et de q38 sont identiques dans les 3 passes. La stabilité générale ne change pas (termes identiques aux 3 passes pour 17 questions sur 49, comme avec l'exemple précédent). Un exemple tiré de l'AI Act semble pousser le modèle vers le vocabulaire des systèmes à haut risque.
+
+**Ce qu'il ne faut pas faire** : essayer d'autres exemples jusqu'à retrouver 44/49 reviendrait à régler le prompt sur les 49 questions connues, ce que l'examen 2 doit justement contrôler. **Décision de l'auteur attendue** : garder « marquage CE » (règle respectée, plus de biais pour e12) et figer la configuration de l'examen.
 
 ## 4. Méthode prévue (après la validation de l'auteur)
 

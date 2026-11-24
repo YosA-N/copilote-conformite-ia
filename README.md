@@ -64,7 +64,7 @@ Un long article découpé en paragraphes pouvait occuper à lui seul les 5 passa
 
 Deux étapes de recherche supplémentaires, décidées à la séance 7 ter (`eval/results_v6.md`) :
 
-- **la reformulation** : le modèle ajoute à la question quelques termes juridiques avant la recherche (par exemple « données de localisation » pour « géolocalisation des véhicules »). Le code écarte tout terme qui contient une conclusion (« interdit », « autorisé », « obligatoire »…) ou un chiffre ;
+- **la reformulation** : le modèle ajoute à la question quelques termes juridiques avant la recherche (par exemple « marquage CE » pour « logo sur l'emballage d'un appareil »). Le code écarte tout terme qui contient une conclusion (« interdit », « autorisé », « obligatoire »…) ou un chiffre ;
 - **le reclassement** : un **reranker** (**cross-encoder**) relit les 20 meilleurs passages trouvés et les reclasse selon leur pertinence par rapport à la question, avant de garder les 5 meilleurs. Le modèle est `BAAI/bge-reranker-v2-m3` (licence Apache-2.0), sur le processeur.
 
 **Par défaut** (`SEARCH_REWRITE=auto` et `SEARCH_RERANK=auto`), les deux sont **activés en mode distant** et **désactivés en mode local**. Vous pouvez forcer `on` ou `off` dans `.env`. La reformulation n'est jamais activée seule par défaut : sans le reclassement, elle fait reculer certaines questions.
