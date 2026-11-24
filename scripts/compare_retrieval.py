@@ -42,7 +42,10 @@ CONFIGS = {  # key: (label, mode, lexicon, limit per article, first paragraph, r
 }
 DEFAULT_CONFIGS = ["start", "lexicon", "limit", "current"]
 LEVELS = [("article", True), ("paragraphe", False)]
-SETS = {"v0": "questions_v0.jsonl", "v1": "questions_v1.jsonl", "v2": "questions_v2.jsonl", "author": "questions_author.jsonl"}
+SETS = {"v0": "questions_v0.jsonl", "v1": "questions_v1.jsonl", "v2": "questions_v2.jsonl", "author": "questions_author.jsonl",
+        "exam2": "questions_exam2.jsonl"}
+# tuning sets, measured by default; exam2 is measured only when asked for (--sets exam2), never while tuning
+TUNING_SETS = ["v0", "v1", "v2", "author"]
 
 
 class CachedReranker:
@@ -86,7 +89,9 @@ def main() -> int:
     parser.add_argument("--repeat", type=int, default=1, help="nombre de mesures complètes (3 recommandé)")
     parser.add_argument("--configs", help=f"configurations, séparées par des virgules, parmi : {', '.join(CONFIGS)} "
                                           f"(par défaut : {','.join(DEFAULT_CONFIGS)})")
-    parser.add_argument("--sets", default=",".join(SETS), help=f"jeux de questions parmi : {', '.join(SETS)} (par défaut : tous)")
+    parser.add_argument("--sets", default=",".join(TUNING_SETS),
+                        help=f"jeux de questions parmi : {', '.join(SETS)} (par défaut : les jeux de réglage {', '.join(TUNING_SETS)} ; "
+                             "exam2 seulement pour l'examen, jamais pour régler)")
     parser.add_argument("--rerank", action="store_true", help="ajouter la configuration « rerank » (RERANKER_MODEL, torch requis)")
     parser.add_argument("--rewrite-log", type=Path, help="fichier JSON où écrire les termes donnés par la reformulation")
     args = parser.parse_args()

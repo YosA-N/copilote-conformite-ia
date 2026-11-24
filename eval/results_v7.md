@@ -97,13 +97,27 @@ Au niveau paragraphe : 40–41/49 (actuelle 35/49). **Aucun recul par rapport à
 
 Ces écarts sont **un effet de l'exemple, pas seulement du hasard** : les termes de q24 et de q38 sont identiques dans les 3 passes. La stabilité générale ne change pas (termes identiques aux 3 passes pour 17 questions sur 49, comme avec l'exemple précédent). Un exemple tiré de l'AI Act semble pousser le modèle vers le vocabulaire des systèmes à haut risque.
 
-**Ce qu'il ne faut pas faire** : essayer d'autres exemples jusqu'à retrouver 44/49 reviendrait à régler le prompt sur les 49 questions connues, ce que l'examen 2 doit justement contrôler. **Décision de l'auteur attendue** : garder « marquage CE » (règle respectée, plus de biais pour e12) et figer la configuration de l'examen.
+**Ce qu'il ne faut pas faire** : essayer d'autres exemples jusqu'à retrouver 44/49 reviendrait à régler le prompt sur les 49 questions connues, ce que l'examen 2 doit justement contrôler. **Décision de l'auteur (24/11/2026) : « marquage CE » est gardé et la configuration de l'examen est figée** (section 4).
 
-## 4. Méthode prévue (après la validation de l'auteur)
+## 4. Configuration figée (24/11/2026) et méthode
 
-Leçon de la séance 7 ter (`eval/results_v6.md`, section 6.5) : une seule passe ne suffit pas pour comparer des réponses générées.
+**Configuration figée** : le commit de la branche `eval/exam-2` qui ajoute cette section (étiquette Git locale `exam2-config`). Après cette étiquette : **aucun changement de code, de prompt, de lexique ni de réglage** avant la fin de l'examen, même après avoir vu une réponse ou un résultat ; ce qui est observé est noté, pas corrigé.
 
-- Configuration figée : `main` au moment de l'examen, réglages par défaut (local : sans reformulation ni reranker ; distant : `auto`, donc reformulation + reranker). Aucun changement de code, de prompt ou de lexique après avoir vu une réponse ou un résultat.
-- Recherche : hit@1 et hit@5, au niveau article, mesurés 3 fois (`compare_retrieval.py --repeat 3`) en local et en distant.
-- Réponses : **chaque question posée 3 fois par mode** (local et distant), relues par l'auteur selon `eval/rubric.md` ; verdicts comptés en moyenne, avec le nombre de questions qui ont reçu au moins une réponse dangereuse.
-- Sur secteur (`BatteryStatus` = 2 avant et après) ; le quota de Groq (200 000 tokens par jour) impose environ une passe distante par jour.
+| | Mode local (défaut) | Mode distant |
+|---|---|---|
+| Modèle qui rédige et juge | `qwen3:4b-instruct` (Ollama 0.40.18, Q4_K_M) | `qwen/qwen3.8-27b` (Groq, preview, `reasoning_effort` non envoyé) |
+| Recherche | `bge-m3` sur CPU, lexique en mots entiers (`SEARCH_LEXICON=all`), 5 passages, 2 au plus par article, 1er paragraphe ajouté | idem, **plus reformulation** (exemple « marquage CE ») **et reranker** `BAAI/bge-reranker-v2-m3` sur CPU (20 candidats) : `SEARCH_REWRITE=auto`, `SEARCH_RERANK=auto` |
+| Génération | température 0,1 ; 2 000 tokens au plus ; contexte 8 192 ; extraits vérifiés mot pour mot ; juge d'abstention | idem |
+| Contrôles du code | tous ceux de la séance 7 ter (négation, citations, adéquation, crochets 「 」 tolérés…) | idem, plus le garde-fou des données personnelles |
+
+- `.env` : seulement des valeurs égales aux valeurs par défaut (`LLM_BACKEND=ollama`), plus la clé de l'API (jamais affichée) ; `SEARCH_REWRITE` et `SEARCH_RERANK` n'y figurent pas, donc `auto`.
+- Corpus et index : RGPD du 04/05/2016 et AI Act du 27/07/2026, 763 morceaux, empreinte `12ea821e…7128`, index `bge-m3` construit le 24/10/2026.
+- Bibliothèques du reranker : `torch` 2.15.0, `transformers` 5.23.0.
+
+**Outil de mesure** : `compare_retrieval.py` connaît le jeu `exam2`, mais **ne le mesure que si on le demande** (`--sets exam2`) ; par défaut, il ne mesure que les jeux de réglage (test `test_retrieval_comparison_never_measures_the_exam_by_default`).
+
+**Méthode** (leçon de la séance 7 ter, `eval/results_v6.md`, section 6.5 : une seule passe ne suffit pas pour comparer des réponses générées) :
+
+- Recherche : hit@1 et hit@5, niveaux article et paragraphe, 3 mesures (`compare_retrieval.py --sets exam2 --configs current,rw_remote_rerank --repeat 3`) : configuration locale et configuration distante.
+- Réponses : **chaque question posée 3 fois par mode** (`answer_questions.py --questions eval\questions_exam2.jsonl --version exam2_local_1` à `_3`, et `--backend openai --version exam2_remote_1` à `_3`), relues par l'auteur selon `eval/rubric.md` ; verdicts comptés en moyenne, avec le nombre de questions qui ont reçu au moins une réponse dangereuse ; résultats donnés aussi à part pour les 6 sujets nouveaux (e04, e05, e10, e12, e23, e25).
+- Sur secteur (`BatteryStatus` = 2 avant et après) ; le quota de Groq (200 000 tokens par jour) impose environ une passe distante par jour, reprise avec `--resume` si besoin.
