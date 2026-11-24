@@ -116,6 +116,33 @@ def test_word_for_word_check_tolerates_only_spacing_quotes_case_and_ellipsis():
     assert not found_word_for_word("un délai d'un mois", law)  # too short to prove anything
 
 
+GDPR_10 = (
+    "Le traitement des données à caractère personnel relatives aux condamnations pénales et aux infractions ou aux mesures "
+    "de sûreté connexes fondé sur l’article 6, paragraphe 1, ne peut être effectué que sous le contrôle de l’autorité publique, "
+    "ou si le traitement est autorisé par le droit de l’Union ou par le droit d’un État membre qui prévoit des garanties "
+    "appropriées pour les droits et libertés des personnes concernées. Tout registre complet des condamnations pénales ne peut "
+    "être tenu que sous le contrôle de l’autorité publique."
+)
+
+
+def test_corner_brackets_are_tolerated_but_a_misspelt_word_is_not():
+    """q38, remote, session 7 ter: the extracts were written between 「 」 (and one with a typo, « autoriture »)."""
+    part = (
+        "EXTRAISTS :\n"
+        "- [1] 「 Le traitement des données à caractère personnel relatives aux condamnations pénales et aux infractions … "
+        "ne peut être effectué que sous le contrôle de l’autoriture publique, … »\n"
+        "- [1] 「 … ou si le traitement est autorisé par le droit de l’Union ou par le droit d’un État membre qui prévoit des "
+        "garanties appropriées pour les droits et libertés des personnes concernées. »\n"
+        "- [1] 『Tout registre complet des condamnations pénales ne peut être tenu que sous le contrôle de l’autorité publique.』\n"
+    )
+
+    extracts = parse_extracts(part)
+    assert [text[0] for _, text in extracts] == ["L", "…", "T"]  # the opening brackets are dropped
+    verified = [found_word_for_word(text, GDPR_10) for _, text in extracts]
+    assert verified == [False, True, True]  # « autoriture » is not in the law: the typo stays rejected
+    assert found_word_for_word("「le contrôle de l’autorité publique」, ou si le traitement est autorisé", GDPR_10)
+
+
 def test_extracts_are_read_with_their_passage_number_and_inner_quotes():
     part = (
         "**EXTRAITS :**\n"

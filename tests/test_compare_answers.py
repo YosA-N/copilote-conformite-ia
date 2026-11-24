@@ -158,3 +158,10 @@ def test_tables_compare_the_series_without_judging_them(tmp_path, capsys):
         assert compare_answers.main() == 0
     out = capsys.readouterr().out
     assert summary[2] in out and "Alertes du code par type" in out and questions[-1] in out
+
+
+def test_a_times_line_with_query_rewriting_is_read():
+    line = ("Temps : recherche 2.4 s · génération 8.0 s (2900 tokens lus, 300 écrits, 35.0 tokens/s) · contrôle de pertinence 1.2 s"
+            " · reformulation 3.1 s · attente des limites de l'API 12 s (non comptée)")
+    times = compare_answers.TIMES.search(line)
+    assert times and times["rewrite"] == "3.1" and times["judge"] == "1.2" and times["wait"] == "12"

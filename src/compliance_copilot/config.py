@@ -13,6 +13,7 @@ DEFAULT_API_KEY_ENV = "GROQ_API_KEY"  # the NAME of the variable that holds the 
 LLM_BACKENDS = ("ollama", "openai")
 DEFAULT_LLM_MODEL = "qwen3:4b-instruct"  # local model, chosen in session 5 (eval/results_v1.md); before: ministral-3:3b
 DEFAULT_EMBEDDING_MODEL = "bge-m3"
+SWITCH_MODES = ("auto", "on", "off")  # SEARCH_RERANK and SEARCH_REWRITE: auto = on in remote mode, off in local mode (session 7 ter)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
@@ -37,8 +38,11 @@ class Settings:
     search_max_per_article: int | None = 2  # at most 2 chunks of the same article among the passages
     search_k: int = 5  # passages given to the language model (8 measured at session 6: slower, no gain with the lexicon)
     search_first_paragraph: bool = True  # add the first paragraph of an article when a later one is kept (session 6)
-    search_rerank: bool = False  # cross-encoder reranker on the candidates (optional, needs torch: session 7 bis)
+    # cross-encoder reranker on the candidates (optional, needs torch: session 7 bis); "auto", "on" or "off"
+    search_rerank_mode: str = "auto"
     search_rerank_candidates: int = 20  # candidates of the vector search given to the reranker
+    # the language model adds the legal wording of the question before the search (session 7 ter); "auto", "on" or "off"
+    search_rewrite_mode: str = "auto"
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     answer_judge: bool = True  # second short call: do the verified extracts answer the question directly?
     llm_backend: str = "ollama"  # "ollama" (local, the default) or "openai" (an OpenAI-compatible API: the remote mode)
@@ -53,6 +57,18 @@ class Settings:
         return self.llm_backend != "ollama"
 
     @property
+    def search_rerank(self) -> bool:
+        """Reranker asked for: SEARCH_RERANK=on, or auto in remote mode (decision of the author, session 7 ter:
+        in local mode, rewriting + reranker created 3 dangerous answers and took 74 s per question)."""
+        return self.search_rerank_mode == "on" or (self.search_rerank_mode == "auto" and self.remote)
+
+    @property
+    def search_rewrite(self) -> bool:
+        """Rewriting asked for: SEARCH_REWRITE=on, or auto when the reranker is used in remote mode. Never alone by
+        default: the rewriting without the reranker set back v0 and v1 (eval/results_v6.md, section 2)."""
+        return self.search_rewrite_mode == "on" or (self.search_rewrite_mode == "auto" and self.remote and self.search_rerank)
+
+    @property
     def generation_model(self) -> str:
         """The model that writes the answers in the chosen mode: LLM_API_MODEL in remote mode, else LLM_MODEL."""
         return self.llm_api_model if self.remote else self.llm_model
@@ -61,6 +77,15 @@ class Settings:
 def optional_int(value: str | None) -> int | None:
     """'' or None → None; '20' → 20."""
     return int(value) if value and value.strip() else None
+
+
+def switch_mode(name: str, default: str = "auto") -> str:
+    """auto / on / off from the environment variable; 1, true, oui mean on and 0, false, non mean off."""
+    value = os.getenv(name, default).strip().lower()
+    value = {"1": "on", "true": "on", "oui": "on", "0": "off", "false": "off", "non": "off"}.get(value, value)
+    if value not in SWITCH_MODES:
+        raise ValueError(f"{name}={value!r} : valeur inconnue, utilisez auto, on ou off.")
+    return value
 
 
 def load_settings() -> Settings:
@@ -81,8 +106,9 @@ def load_settings() -> Settings:
         search_max_per_article=optional_int(os.getenv("SEARCH_MAX_PER_ARTICLE", "2")),
         search_k=int(os.getenv("SEARCH_K", "5")),
         search_first_paragraph=os.getenv("SEARCH_FIRST_PARAGRAPH", "on").strip().lower() in {"on", "1", "true", "oui"},
-        search_rerank=os.getenv("SEARCH_RERANK", "off").strip().lower() in {"on", "1", "true", "oui"},
+        search_rerank_mode=switch_mode("SEARCH_RERANK"),
         search_rerank_candidates=int(os.getenv("SEARCH_RERANK_CANDIDATES", "20")),
+        search_rewrite_mode=switch_mode("SEARCH_REWRITE"),
         reranker_model=os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3").strip(),
         answer_judge=os.getenv("ANSWER_JUDGE", "on").strip().lower() in {"on", "1", "true", "oui"},
         llm_backend=os.getenv("LLM_BACKEND", "ollama").strip().lower(),

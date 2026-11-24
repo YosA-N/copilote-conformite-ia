@@ -1,11 +1,14 @@
 """Optional reranker: a cross-encoder scores (question, passage) pairs and reorders the candidates of the search.
 
-Off by default (SEARCH_RERANK=off). The model (BAAI/bge-reranker-v2-m3, Apache-2.0, 568 million parameters,
+On by default in remote mode only (SEARCH_RERANK=auto, session 7 ter); off in local mode. The model (BAAI/bge-reranker-v2-m3, Apache-2.0, 568 million parameters,
 about 2.3 GB downloaded once into the Hugging Face cache) runs on the CPU with torch and transformers, which
 are NOT required by the copilot: they are imported only when the reranker is switched on, so everything else
 works without them. Measured in session 7 bis (eval/results_v4.md).
 """
 
+import importlib.util
+from collections.abc import Callable
+from dataclasses import replace
 from typing import Protocol
 
 from compliance_copilot.config import Settings
@@ -49,7 +52,7 @@ class CrossEncoderReranker:
         except ImportError as error:  # torch or transformers missing: the copilot itself does not need them
             raise RerankerError(
                 f"Reranker demandé (SEARCH_RERANK=on) mais {error.name} n'est pas installé : installez les dépendances "
-                f"optionnelles avec {INSTALL_HINT}, ou remettez SEARCH_RERANK=off."
+                f"optionnelles avec {INSTALL_HINT}, ou mettez SEARCH_RERANK=auto ou off."
             ) from None
         torch.set_num_threads(max(1, torch.get_num_threads()))
         self._torch = torch
@@ -73,8 +76,36 @@ class CrossEncoderReranker:
         return scores
 
 
+FALLBACK_NOTICE = (
+    "Reformulation et reranker prévus par défaut en mode distant, mais torch ou transformers n'est pas installé : "
+    "recherche sans reformulation ni reranker (configuration validée avant la séance 7 ter). "
+    f"Pour les activer : {INSTALL_HINT}. Pour ne plus voir ce message : SEARCH_RERANK=off dans .env."
+)
+
+
+def reranker_installed() -> bool:
+    """True if torch and transformers can be imported (checked without importing them)."""
+    try:
+        return all(importlib.util.find_spec(name) is not None for name in ("torch", "transformers"))
+    except (ImportError, ValueError):
+        return False
+
+
+def resolve_search(settings: Settings, installed: Callable[[], bool] = reranker_installed) -> tuple[Settings, str]:
+    """The settings with SEARCH_RERANK and SEARCH_REWRITE decided (on or off) for this run, and a notice to show.
+
+    In remote mode, auto turns both on. If torch is missing, auto falls back to the configuration validated before
+    session 7 ter, without the reranker AND without the rewriting: never the rewriting alone, which set back v0 and
+    v1. SEARCH_RERANK=on written in .env is kept: the reranker then stops with its clear error on first use."""
+    rerank, rewrite, notice = settings.search_rerank, settings.search_rewrite, ""
+    if rerank and settings.search_rerank_mode == "auto" and not installed():
+        rerank, rewrite, notice = False, False, FALLBACK_NOTICE
+    decided = {True: "on", False: "off"}
+    return replace(settings, search_rerank_mode=decided[rerank], search_rewrite_mode=decided[rewrite]), notice
+
+
 def make_reranker(settings: Settings) -> CrossEncoderReranker | None:
-    """The reranker configured in .env, or None when SEARCH_RERANK is off (the default)."""
+    """The reranker configured in .env, or None when it is not used (local mode by default)."""
     if not settings.search_rerank:
         return None
     return CrossEncoderReranker(settings.reranker_model)

@@ -105,3 +105,19 @@ def test_search_respects_the_limit_per_article(index_dir, fake_embedder):
 def test_unknown_search_options_are_rejected(index_dir, fake_embedder):
     with pytest.raises(ValueError):
         search("DPO", index_dir, fake_embedder, mode="magic")
+
+
+def test_lexicon_matches_whole_words_only_and_keeps_word_families():
+    """Session 7 ter: « enregistre » no longer triggers « registre » (question a04), word families still match."""
+    assert expand_query("Un outil d'IA enregistre la discussion") == "Un outil d'IA enregistre la discussion"
+    assert "amendes administratives" not in expand_query("Ce projet d'amendement change-t-il quelque chose ?")
+    for text, wording in (
+        ("Faut-il tenir nos registres ?", "registre des activités de traitement"),
+        ("Une cliente conteste ses données", "personne concernée"),
+        ("Tri des candidatures", "recrutement ou sélection"),
+        ("Une publicité ciblée", "prospection"),
+        ("Comment sécuriser le site ?", "sécurité du traitement"),
+        ("Une IA émotionnelle", "reconnaissance des émotions"),
+        ("Des dossiers médicaux", "données concernant la santé"),
+    ):
+        assert wording in expand_query(text), text

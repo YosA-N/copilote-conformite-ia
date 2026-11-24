@@ -29,6 +29,7 @@ TIMES = re.compile(
     r"\((?P<prompt_tokens>\d+) tokens lus, (?P<completion_tokens>\d+) écrits(?:, raisonnement ≈ (?P<reasoning_words>\d+) mots)?, "
     r"(?P<tokens_per_second>[\d.]+) tokens/s\)"
     r"(?: · contrôle de pertinence (?P<judge>[\d.]+) s)?"
+    r"(?: · reformulation (?P<rewrite>[\d.]+) s)?"
     r"(?: · attente des limites de l'API (?P<wait>\d+) s \(non comptée\))?$",
     re.MULTILINE,
 )

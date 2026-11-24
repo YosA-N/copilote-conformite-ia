@@ -30,6 +30,7 @@ from compliance_copilot.adequacy import (  # noqa: F401 (ADEQUACY_* and cites_tr
     redact_adequacy_claims,
 )
 from compliance_copilot.privacy import refuse_personal_data
+from compliance_copilot.rewrite import rewrite_terms
 
 # Written with "vous" from start to end: a prompt that says "tu" to the model makes it say "tu" to the user.
 SYSTEM_PROMPT = """Vous êtes le copilote de conformité : vous aidez les PME et les associations à comprendre le RGPD et l'AI Act.
@@ -180,6 +181,8 @@ class RagAnswer:
     judge_seconds: float = 0.0
     wait_seconds: float = 0.0  # time spent waiting for the rate limits of an API, not counted in the times above
     notes: list[str] = field(default_factory=list)  # fixed notes added by the code (not by the model) under the answer
+    rewrite_terms: list[str] = field(default_factory=list)  # legal terms added to the question before the search (SEARCH_REWRITE)
+    rewrite_seconds: float = 0.0
 
     @property
     def verified_extracts(self) -> list[Extract]:
@@ -259,8 +262,12 @@ def check_citations(text: str, passage_count: int) -> CitationCheck:
 
 TYPOGRAPHIC = str.maketrans(
     {"\u2019": "'", "\u2018": "'", "\u00ab": None, "\u00bb": None, '"': None, "\u201c": None, "\u201d": None, "\u00ad": None,
+     "\u300c": None, "\u300d": None, "\u300e": None, "\u300f": None,
      "\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2013": "-"}
-)  # apostrophes made plain, quotes dropped, soft hyphen dropped, hyphen variants (non-breaking…) made plain
+)  # apostrophes made plain, quotes dropped (also the corner brackets 「 」 『 』 a remote model wrote, q38 of
+#    session 7 ter), soft hyphen dropped, hyphen variants (non-breaking…) made plain
+OPENING_QUOTE = "«\"“\u300c\u300e"
+CLOSING_QUOTE = "»\"”\u300d\u300f"
 SPACE_BEFORE_PUNCTUATION = re.compile(r"\s+(?=[:;!?,.])")  # « nécessaire : a) » written by a model, « nécessaire: a) » in the text
 
 
@@ -309,9 +316,9 @@ def parse_extracts(extracts_part: str) -> list[tuple[int | None, str]]:
     parsed = []
     for item in items:
         number, text = ITEM.match(item).groups()
-        text = re.sub(r"^[«\"“]\s*", "", text.strip(" *_"))  # also drop Markdown emphasis: *« … »*
-        text = re.sub(r"([»\"”])\s*[*_]*\[\d+[a-z]?\][*_]*\s*$", r"\1", text)  # citation repeated after the quote: « … »**[2]**
-        text = re.sub(r"\s*[»\"”]\s*[.;,]?\s*$", "", text.strip(" *_")).strip(" *_")
+        text = re.sub(rf"^[{OPENING_QUOTE}]\s*", "", text.strip(" *_"))  # also drop Markdown emphasis: *« … »*
+        text = re.sub(rf"([{CLOSING_QUOTE}])\s*[*_]*\[\d+[a-z]?\][*_]*\s*$", r"\1", text)  # citation repeated after the quote: « … »**[2]**
+        text = re.sub(rf"\s*[{CLOSING_QUOTE}]\s*[.;,]?\s*$", "", text.strip(" *_")).strip(" *_")
         if text and text.casefold() not in {"aucun", "aucune", "aucun extrait"}:
             parsed.append((int(number) if number else None, text))
     return parsed
@@ -755,18 +762,30 @@ def answer_question(
     first_paragraph: bool = False,
     reranker=None,
     rerank_candidates: int = 20,
+    rewrite: bool = False,
 ) -> RagAnswer:
     """Search the closest passages, have the model quote them and answer, then check everything.
 
     With a remote model, a question that holds personal data raises PersonalDataError before the search and
-    before anything is sent (compliance_copilot.privacy)."""
+    before anything is sent (compliance_copilot.privacy). With rewrite=True, the model first adds the legal
+    wording of the question (compliance_copilot.rewrite), after that guard."""
     refuse_personal_data(question, chat_model)
+    terms, rewrite_seconds, rewrite_wait = [], 0.0, 0.0
+    if rewrite:
+        waited_before = getattr(chat_model, "waited_seconds", 0.0)
+        start = time.perf_counter()
+        terms = rewrite_terms(question, chat_model)
+        rewrite_wait = getattr(chat_model, "waited_seconds", 0.0) - waited_before
+        rewrite_seconds = time.perf_counter() - start - rewrite_wait
     start = time.perf_counter()
     found = search(question, index_dir, embedder, k=k, mode=mode, lexicon=lexicon, max_per_article=max_per_article,
-                   first_paragraph=first_paragraph, reranker=reranker, rerank_candidates=rerank_candidates)
+                   first_paragraph=first_paragraph, reranker=reranker, rerank_candidates=rerank_candidates, extra_terms=terms)
     search_seconds = time.perf_counter() - start
     passages = fit_passages(question, found, chat_model)
-    return answer_from_passages(question, passages, chat_model, on_text, search_seconds, found=len(found), judge=judge)
+    answer = answer_from_passages(question, passages, chat_model, on_text, search_seconds, found=len(found), judge=judge)
+    answer.rewrite_terms, answer.rewrite_seconds = terms, rewrite_seconds
+    answer.wait_seconds += rewrite_wait
+    return answer
 
 
 def judge_extracts(question: str, extracts: list[str], chat_model: ChatModel) -> bool | None:
