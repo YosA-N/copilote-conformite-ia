@@ -9,6 +9,8 @@ from compliance_copilot.index import SearchResult, search
 from compliance_copilot.llm import Generation
 from compliance_copilot.rag import (
     ABSTENTION,
+    ANSWER_RESERVE_TOKENS,
+    CUT_MARK,
     DISCLAIMER,
     REFUSAL,
     SYSTEM_PROMPT,
@@ -19,6 +21,8 @@ from compliance_copilot.rag import (
     answer_question,
     build_messages,
     check_citations,
+    complete_extracts,
+    extracts_overrun,
     flipped_negations,
     found_word_for_word,
     incomplete_case_lists,
@@ -568,10 +572,10 @@ class ScriptedChatModel(FakeChatModel):
         self.verdicts = list(verdicts)
         self.calls: list[list[dict]] = []
 
-    def generate(self, messages, on_text=None) -> Generation:
+    def generate(self, messages, on_text=None, **options) -> Generation:
         self.calls.append(messages)
         if len(self.calls) == 1:
-            return super().generate(messages, on_text)
+            return super().generate(messages, on_text, **options)
         return Generation(self.verdicts.pop(0), prompt_tokens=50, completion_tokens=1, seconds=0.1, tokens_per_second=10.0, truncated=False)
 
 
@@ -636,9 +640,9 @@ class WaitingChatModel(ScriptedChatModel):
 
     waited_seconds = 0.0
 
-    def generate(self, messages, on_text=None):
+    def generate(self, messages, on_text=None, **options):
         self.waited_seconds += 30.0
-        return super().generate(messages, on_text)
+        return super().generate(messages, on_text, **options)
 
 
 def test_rate_limit_waits_are_not_counted_as_generation_time(passages):
@@ -681,8 +685,8 @@ def test_truncated_answer_is_reported(passages):
 class ReasoningChatModel(FakeChatModel):
     """Like an API model that reasons before answering: the reasoning comes back apart from the text."""
 
-    def generate(self, messages, on_text=None) -> Generation:
-        return dataclasses.replace(super().generate(messages, on_text), reasoning="je pèse chaque mot " * 25)
+    def generate(self, messages, on_text=None, **options) -> Generation:
+        return dataclasses.replace(super().generate(messages, on_text, **options), reasoning="je pèse chaque mot " * 25)
 
 
 def test_truncation_by_the_reasoning_is_reported_with_its_size(passages):
@@ -690,6 +694,152 @@ def test_truncation_by_the_reasoning_is_reported_with_its_size(passages):
 
     warning = next(w for w in answer.warnings if "Réponse coupée" in w)
     assert "raisonnement" in warning and "environ 100 mots" in warning
+
+
+# ---------------------------------------------------------------- room kept for the answer (eval/results_v8.md)
+
+# Article 37, § 1 of the test corpus copied as one long extract, as the local model did with lists (e17 of exam 2)
+POINT_A = ("a) le traitement est effectué par une autorité publique ou un organisme public, à l'exception des juridictions "
+           "agissant dans l'exercice de leur fonction juridictionnelle;")
+POINT_B = ("b) les activités de base du responsable du traitement ou du sous-traitant consistent en des opérations de traitement "
+           "qui, du fait de leur nature, de leur portée et/ou de leurs finalités, exigent un suivi régulier et systématique "
+           "à grande échelle des personnes concernées;")
+LONG_EXTRACTS = f"EXTRAITS :\n- [1] « {ARTICLE_37} lorsque: {POINT_A} {POINT_B} »\n\nRÉPONSE :\nOui [1]."
+ANSWER_AFTER_STOP = "Oui : vous devez désigner un délégué à la protection des données dans ces cas [1]."
+
+
+def stopping_model(**options) -> FakeChatModel:
+    """A model whose answer limit leaves room for the extracts only up to the middle of point b)."""
+    cap = (LONG_EXTRACTS.index("b) les activités") + 30) // 3  # in pieces of 3 characters
+    return FakeChatModel(max_tokens=ANSWER_RESERVE_TOKENS + cap, replies=[LONG_EXTRACTS, ANSWER_AFTER_STOP], **options)
+
+
+def test_unfinished_last_extract_is_cut_after_its_last_complete_point():
+    written = f"EXTRAITS :\n- [2] « {ARTICLE_37}. »\n- [1] « {ARTICLE_37} lorsque: {POINT_A} b) les activités de"
+
+    kept = complete_extracts(written)
+
+    assert kept == f"EXTRAITS :\n- [2] « {ARTICLE_37}. »\n- [1] « {ARTICLE_37} lorsque: {POINT_A} … »"
+
+
+def test_cut_never_stops_on_a_paragraph_number():
+    written = "- [4] « 1. La conception permet un contrôle effectif. 2. Le contrôle humain vise à prévenir les risques. 3. Les mesures de"
+
+    assert complete_extracts(written) == "- [4] « 1. La conception permet un contrôle effectif. 2. Le contrôle humain vise à prévenir les risques. … »"
+
+
+def test_unfinished_extract_too_short_to_prove_anything_is_dropped():
+    written = f"EXTRAITS :\n- [1] « {ARTICLE_37}. »\n- [2] « Les fournisseurs informent l'autorité"
+
+    assert complete_extracts(written) == f"EXTRAITS :\n- [1] « {ARTICLE_37}. »"
+
+
+def test_closed_extracts_are_kept_and_a_header_begun_after_them_is_dropped():
+    written = f"EXTRAITS :\n- [1] « {ARTICLE_37} »[1]\n- [3] « {POINT_A} »\n\nRÉPO"
+
+    assert complete_extracts(written) == f"EXTRAITS :\n- [1] « {ARTICLE_37} »[1]\n- [3] « {POINT_A} »"
+
+
+def test_overrun_stops_only_when_the_answer_has_not_started():
+    stop = extracts_overrun(10)
+
+    assert not stop("EXTRAITS :\n- [1] « …", 9)
+    assert stop("EXTRAITS :\n- [1] « …", 10)
+    assert not stop("EXTRAITS :\n- [1] « … »\n\nRÉPONSE :\nOui", 50)
+
+
+def test_extracts_too_long_are_stopped_and_the_answer_is_asked_with_the_tokens_left(passages):
+    model = stopping_model()
+
+    answer = answer_from_passages(QUESTION, passages, model)
+
+    assert len(model.requests) == 2 and answer.extracts_cut
+    cap = model.max_tokens - ANSWER_RESERVE_TOKENS
+    first, second = model.requests
+    assert first["should_stop"] is not None and first["max_tokens"] is None
+    prefill = second["messages"][-1]
+    assert prefill["role"] == "assistant" and prefill["content"].endswith("juridictionnelle; … »\n\nRÉPONSE :\n")
+    assert second["messages"][:-1] == first["messages"]  # same prompt, continued after the extracts
+    assert second["max_tokens"] == model.max_tokens - cap == ANSWER_RESERVE_TOKENS
+    assert not answer.refused and answer.text == ANSWER_AFTER_STOP
+    assert [extract.verified for extract in answer.extracts] == [True]
+    assert answer.extracts[0].text.endswith("juridictionnelle; …")
+    assert answer.raw_text == prefill["content"] + ANSWER_AFTER_STOP
+    assert answer.generation.completion_tokens == cap + 10 and answer.generation.stopped
+    assert answer.warnings[0].startswith(f"Extraits trop longs : le code a arrêté leur recopie après {cap} tokens")
+    assert not any("Réponse coupée" in warning for warning in answer.warnings)
+
+
+def test_answer_streamed_after_a_stop_shows_only_the_answer(passages):
+    shown: list[str] = []
+
+    answer = answer_from_passages(QUESTION, passages, stopping_model(), on_text=shown.append)
+
+    assert "".join(shown) == answer.text == ANSWER_AFTER_STOP  # neither the extracts nor a refusal were shown
+
+
+def test_answer_that_starts_in_time_is_written_in_one_call(passages):
+    model = FakeChatModel(reply=GOOD_REPLY, max_tokens=2000)
+
+    answer = answer_from_passages(QUESTION, passages, model)
+
+    assert len(model.requests) == 1 and not answer.extracts_cut
+    assert not any("Extraits trop longs" in warning for warning in answer.warnings)
+
+
+def test_model_that_does_not_stream_is_never_stopped(passages):
+    class WholeAnswerModel(FakeChatModel):  # like the remote API: the answer comes back whole
+        def generate(self, messages, on_text=None, should_stop=None, max_tokens=None):
+            return super().generate(messages, on_text, max_tokens=max_tokens)
+
+    model = WholeAnswerModel(reply=LONG_EXTRACTS, max_tokens=ANSWER_RESERVE_TOKENS + 20)
+
+    answer = answer_from_passages(QUESTION, passages, model)
+
+    assert len(model.requests) == 1 and not answer.extracts_cut and answer.text == "Oui [1]."
+
+
+def test_no_stop_when_the_limit_leaves_no_room_beyond_the_reserve(passages):
+    model = FakeChatModel(reply=LONG_EXTRACTS, max_tokens=ANSWER_RESERVE_TOKENS)
+
+    answer_from_passages(QUESTION, passages, model)
+
+    assert model.requests[0]["should_stop"] is None
+
+
+def test_answer_still_cut_ends_with_a_visible_mark(passages):
+    uncited = f"EXTRAITS :\n- [1] « {ARTICLE_37} »\n\nRÉPONSE :\nOui : le responsable du traitement désigne un délégué à la protection des"
+
+    answer = answer_from_passages(QUESTION, passages, FakeChatModel(reply=uncited, truncated=True))
+
+    assert answer.text == "Oui : le responsable du traitement désigne un délégué à la protection des" + CUT_MARK
+    assert any("Réponse coupée" in warning for warning in answer.warnings)
+    # without [n], each sentence is compared with the extracts: the mark must not be read as one of them
+    assert not any("ne reprend pas les extraits" in warning for warning in answer.warnings)
+
+
+def test_streamed_answer_still_cut_ends_with_the_mark(passages):
+    shown: list[str] = []
+
+    answer = answer_from_passages(QUESTION, passages, FakeChatModel(reply=GOOD_REPLY, truncated=True), on_text=shown.append)
+
+    assert "".join(shown).endswith(CUT_MARK) and answer.text.endswith(CUT_MARK)
+
+
+def test_answer_cut_even_after_a_stop_gets_the_mark_and_both_warnings(passages):
+    answer = answer_from_passages(QUESTION, passages, stopping_model(truncated=True))
+
+    assert answer.text == ANSWER_AFTER_STOP + CUT_MARK
+    assert answer.warnings[0].startswith("Extraits trop longs") and any("Réponse coupée" in w for w in answer.warnings)
+
+
+def test_refusal_and_abstention_get_no_mark(passages):
+    refused = answer_from_passages(QUESTION, passages, FakeChatModel(reply=f"EXTRAITS :\n- [1] « {ARTICLE_37} »\n", truncated=True))
+    judged = ScriptedChatModel(GOOD_REPLY, ["NON"])
+    judged.truncated = True
+    abstained = answer_from_passages(QUESTION, passages, judged, judge=True)
+
+    assert refused.text == REFUSAL and abstained.text == ABSTENTION
 
 
 def test_passages_that_do_not_fit_in_the_context_are_dropped(index_dir, fake_embedder):

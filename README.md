@@ -97,6 +97,7 @@ Le code, et non le modèle :
 - **remplace la réponse par « Les textes trouvés ne permettent pas de répondre à cette question. »** si aucun extrait n'est vérifié : une réponse sans appui dans les textes n'est jamais affichée, même en partie ;
 - affiche les extraits vérifiés, puis la liste des sources (règlement, article, titre, lien EUR-Lex, date de version), construite à partir des métadonnées ;
 - signale un extrait introuvable, une citation sans extrait vérifié, une citation vers un passage inexistant ou une réponse coupée par la limite de longueur ;
+- **garde de la place pour la réponse** : si le modèle recopie encore des extraits après 1 200 tokens (sur 2 000), le code arrête la recopie, garde les extraits complets et lui fait écrire sa réponse avec les tokens restants, puis le signale ; une réponse encore coupée se termine par « […] (réponse coupée : la limite de longueur a été atteinte) » ([`eval/results_v8.md`](eval/results_v8.md)) ;
 - relit la réponse elle-même et signale :
   - si elle ne cite aucun passage [n], une phrase dont moins de 35 % des mots se retrouvent dans les extraits vérifiés ;
   - une phrase qui affirme une absence ou une impossibilité (« aucune obligation », « ne s'applique pas », « vous ne pouvez pas »…) alors qu'aucun extrait vérifié ne contient de négation ;
@@ -156,6 +157,7 @@ Les 28 questions de l'examen 2 ont été écrites hors du projet, par un assista
 
 - **Les réponses varient d'une passe à l'autre ; des réponses dangereuses restent possibles dans les deux modes** (local et distant). La même question, avec la même configuration, peut recevoir une réponse juste puis une réponse dangereuse (`eval/results_v6.md`, section 6.5) : vérifiez toujours les articles cités.
 - **Petit modèle local** : `qwen3:4b-instruct` (4 milliards de paramètres) tourne sur une carte de 4 Go, mais il se trompe encore. Les relectures humaines (`eval/review_v*.md`) ont trouvé une exception inversée, des cas oubliés dans une liste, une obligation du fournisseur présentée comme celle de l'utilisateur, deux analyses d'impact confondues et des fautes de frappe.
+- **Extraits trop longs** : le modèle local recopie parfois une liste ou un paragraphe entier comme un seul extrait. Le code arrête alors la recopie pour que la réponse ait de la place (`eval/results_v8.md`). Mais le modèle a toujours le passage entier sous les yeux, et il peut encore appliquer une règle d'un autre paragraphe. Exemple à l'examen 2 (e17) : la vérification par deux personnes de l'AI Act, art. 14, § 5, réservée à l'identification biométrique, appliquée au tri de CV.
 - **Contrôles automatiques imparfaits** : ils comparent des mots, sans comprendre le sens. Ils laissent passer des erreurs et signalent parfois des phrases justes. Une réponse sans alerte n'est pas une réponse garantie.
 - **Extrait vérifié ≠ bonne réponse** : un extrait vérifié prouve que la phrase existe dans la loi, pas qu'elle répond à la question posée ni qu'elle s'applique à votre situation.
 - **Relecture humaine nécessaire** : le copilote donne une information, pas un conseil juridique. Vérifiez toujours les articles cités sur EUR-Lex et, en cas de doute, demandez l'avis d'un professionnel ou de la CNIL.
@@ -180,7 +182,7 @@ Le modèle de génération se règle dans `.env` :
 | `LLM_NUM_CTX` | `8192` | Taille du contexte en tokens : passages + question + réponse |
 | `LLM_NUM_GPU` | `99` | Couches du modèle placées sur la carte graphique (99 = toutes, le plus rapide) |
 | `LLM_TEMPERATURE` | `0.1` | Basse : réponses plus stables et plus fidèles aux passages |
-| `LLM_MAX_TOKENS` | `2000` | Longueur maximale (extraits + réponse) ; une réponse coupée est signalée |
+| `LLM_MAX_TOKENS` | `2000` | Longueur maximale (extraits + réponse), dont 800 tokens toujours gardés pour la réponse ; une réponse coupée est signalée et marquée « […] » |
 
 Avec ces valeurs, `qwen3:4b-instruct` occupe 3,68 Go sur une carte de 4 Go (`ministral-3:3b` : 3,87 Go). Si le copilote affiche « Mémoire insuffisante », par exemple parce qu'une autre application utilise la carte graphique, essayez dans cet ordre :
 1. baissez `LLM_NUM_CTX` à `6144` (mesuré : 3,39 Go avec qwen, 3,66 Go avec ministral) ou `4096` (3,10 Go avec qwen, 3,45 Go avec ministral) ;

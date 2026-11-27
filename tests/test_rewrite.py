@@ -52,11 +52,11 @@ class RewritingModel(FakeChatModel):
         super().__init__(reply=reply)
         self.terms, self.calls = terms, []
 
-    def generate(self, messages, on_text=None):
+    def generate(self, messages, on_text=None, **options):
         self.calls.append(messages)
         if len(self.calls) == 1:
             return Generation(self.terms, prompt_tokens=50, completion_tokens=10, seconds=0.1, tokens_per_second=100.0, truncated=False)
-        return super().generate(messages, on_text)
+        return super().generate(messages, on_text, **options)
 
 
 def test_answer_question_rewrites_first_when_asked_and_keeps_the_terms(index_dir, fake_embedder):

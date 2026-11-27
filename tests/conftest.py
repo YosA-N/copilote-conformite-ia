@@ -41,22 +41,32 @@ class FakeEmbedder:
 
 
 class FakeChatModel:
-    """Writes a fixed answer, in pieces of 3 characters, like a streamed model would."""
+    """Writes a fixed answer, in pieces of 3 characters, like a streamed model would (one piece counts as one token).
 
-    def __init__(self, reply: str = "Oui [1].", truncated: bool = False, num_ctx: int = 8192, max_tokens: int = 700):
+    With `replies`, each call writes the next reply (for the answer asked after the code stopped the extracts)."""
+
+    def __init__(self, reply: str = "Oui [1].", truncated: bool = False, num_ctx: int = 8192, max_tokens: int = 700,
+                 replies: list[str] | None = None):
         self.model = "fake-llm"
         self.reply = reply
+        self.replies = list(replies or [])
         self.truncated = truncated
         self.num_ctx = num_ctx
         self.max_tokens = max_tokens
         self.messages: list[dict] = []  # what the model received, to check the prompt
+        self.requests: list[dict] = []  # every call: messages, should_stop, max_tokens
 
-    def generate(self, messages, on_text=None) -> Generation:
+    def generate(self, messages, on_text=None, should_stop=None, max_tokens=None) -> Generation:
         self.messages = messages
-        for start in range(0, len(self.reply), 3):
+        self.requests.append({"messages": messages, "should_stop": should_stop, "max_tokens": max_tokens})
+        reply = self.replies.pop(0) if self.replies else self.reply
+        for count, start in enumerate(range(0, len(reply), 3), start=1):
             if on_text:
-                on_text(self.reply[start : start + 3])
-        return Generation(self.reply, prompt_tokens=100, completion_tokens=10, seconds=0.5, tokens_per_second=20.0, truncated=self.truncated)
+                on_text(reply[start : start + 3])
+            if should_stop and start + 3 < len(reply) and should_stop(reply[: start + 3], count):
+                return Generation(reply[: start + 3], prompt_tokens=0, completion_tokens=count, seconds=0.5,
+                                  tokens_per_second=20.0, truncated=False, stopped=True)
+        return Generation(reply, prompt_tokens=100, completion_tokens=10, seconds=0.5, tokens_per_second=20.0, truncated=self.truncated)
 
 
 @pytest.fixture

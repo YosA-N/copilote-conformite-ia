@@ -37,6 +37,12 @@ class Generation:
     tokens_per_second: float  # writing speed of the answer
     truncated: bool  # stopped by the max_tokens limit, so the end of the answer is missing
     reasoning: str = ""  # reasoning written by an API model before its answer: hidden from the user, but counted in completion_tokens
+    stopped: bool = False  # stopped early by the caller (should_stop), not by the model nor by the max_tokens limit
+
+
+# should_stop(text written so far, pieces written so far) → True to stop the generation there. Ollama streams about one
+# token per piece, so the number of pieces counts the tokens written.
+StopCheck = Callable[[str, int], bool]
 
 
 class ChatModel(Protocol):
@@ -46,8 +52,12 @@ class ChatModel(Protocol):
     remote: bool  # True when the messages leave the computer: the personal-data guard of rag.answer_question then applies
     provider: str  # who serves the model ("Ollama", "Groq"…), named in the refusal of the guard
 
-    def generate(self, messages: list[dict], on_text: Callable[[str], None] | None = None) -> Generation:
-        """Answer the conversation; on_text receives each piece of text as soon as it is written."""
+    def generate(self, messages: list[dict], on_text: Callable[[str], None] | None = None,
+                 should_stop: StopCheck | None = None, max_tokens: int | None = None) -> Generation:
+        """Answer the conversation; on_text receives each piece of text as soon as it is written.
+
+        should_stop is checked after each streamed piece (a backend that does not stream ignores it); max_tokens
+        replaces the model's limit for this call only. A last message from the assistant is continued (prefill)."""
         ...
 
 
@@ -85,8 +95,8 @@ class OllamaChatModel:
         self.max_tokens = max_tokens
         self.timeout = timeout
 
-    def _request_body(self, messages: list[dict]) -> dict:
-        options = {"temperature": self.temperature, "num_ctx": self.num_ctx, "num_predict": self.max_tokens}
+    def _request_body(self, messages: list[dict], max_tokens: int | None = None) -> dict:
+        options = {"temperature": self.temperature, "num_ctx": self.num_ctx, "num_predict": max_tokens or self.max_tokens}
         if self.num_gpu is not None:
             options["num_gpu"] = self.num_gpu
         return {"model": self.model, "messages": messages, "stream": True, "options": options}
@@ -108,14 +118,17 @@ class OllamaChatModel:
             )
         return f"Ollama a renvoyé une erreur : {detail}"
 
-    def generate(self, messages: list[dict], on_text: Callable[[str], None] | None = None) -> Generation:
+    def generate(self, messages: list[dict], on_text: Callable[[str], None] | None = None,
+                 should_stop: StopCheck | None = None, max_tokens: int | None = None) -> Generation:
         request = urllib.request.Request(
             f"{self.base_url}/api/chat",
-            data=json.dumps(self._request_body(messages)).encode("utf-8"),
+            data=json.dumps(self._request_body(messages, max_tokens)).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
         pieces: list[str] = []
         final: dict = {}
+        stopped = False
+        start = first_piece = time.perf_counter()
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 for line in response:  # one JSON object per line while the answer is written
@@ -126,9 +139,14 @@ class OllamaChatModel:
                         raise LLMError(self._explain(data["error"]))
                     piece = data.get("message", {}).get("content", "")
                     if piece:
+                        if not pieces:
+                            first_piece = time.perf_counter()
                         pieces.append(piece)
                         if on_text:
                             on_text(piece)
+                        if should_stop and not data.get("done") and should_stop("".join(pieces), len(pieces)):
+                            stopped = True
+                            break  # leaving the stream closes the connection: Ollama then stops writing
                     if data.get("done"):
                         final = data
         except urllib.error.HTTPError as error:
@@ -141,6 +159,11 @@ class OllamaChatModel:
         except (urllib.error.URLError, TimeoutError) as error:
             raise LLMError(f"Ollama ne répond pas sur {self.base_url} ({error}). Lancez l'application Ollama.") from error
 
+        if stopped:  # Ollama sends its statistics only at the end: count the pieces and time them here
+            now = time.perf_counter()
+            writing = now - first_piece
+            return Generation(text="".join(pieces), prompt_tokens=0, completion_tokens=len(pieces), seconds=now - start,
+                              tokens_per_second=len(pieces) / writing if writing > 0 else 0.0, truncated=False, stopped=True)
         completion_tokens = final.get("eval_count", 0)
         writing_seconds = final.get("eval_duration", 0) / 1e9
         return Generation(
@@ -242,10 +265,12 @@ class OpenAICompatibleChatModel:
             raise LLMError(self._hide_key(f"L'API {self.base_url} ne répond pas ({error}). Vérifiez la connexion.")) from None
         return sorted(model["id"] for model in data.get("data", []) if isinstance(model, dict) and "id" in model)
 
-    def generate(self, messages: list[dict], on_text: Callable[[str], None] | None = None) -> Generation:
+    def generate(self, messages: list[dict], on_text: Callable[[str], None] | None = None,
+                 should_stop: StopCheck | None = None, max_tokens: int | None = None) -> Generation:
+        """should_stop is ignored: the answer is not streamed, it comes back whole (no remote answer was ever cut)."""
         self._require_key()
         payload = {"model": self.model, "messages": messages, "temperature": self.temperature,
-                   "max_completion_tokens": self.max_tokens, "stream": False}  # max_tokens is deprecated by the API
+                   "max_completion_tokens": max_tokens or self.max_tokens, "stream": False}  # max_tokens is deprecated by the API
         if self.reasoning_effort:
             payload["reasoning_effort"] = self.reasoning_effort
         body = json.dumps(payload).encode("utf-8")
