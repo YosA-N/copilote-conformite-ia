@@ -25,7 +25,7 @@ from compliance_copilot.embeddings import EmbeddingError, make_embedder
 from compliance_copilot.evaluation import describe_reference, first_hit_rank, load_questions
 from compliance_copilot.index import IndexNotReadyError
 from compliance_copilot.llm import LLMError, make_chat_model
-from compliance_copilot.rag import ABSTENTION, RagAnswer, answer_question, render_footer
+from compliance_copilot.rag import ABSTENTION, ANSWER_RESERVE_TOKENS, RagAnswer, answer_question, render_footer
 from compliance_copilot.rerank import make_reranker, resolve_search
 from compliance_copilot.sources import SOURCES
 
@@ -150,7 +150,8 @@ def generation_line(settings: Settings) -> str:
         return (
             f"- Génération : `{settings.generation_model}` via Ollama {ollama_version(settings.ollama_base_url)} — température "
             f"{settings.llm_temperature}, contexte {settings.llm_num_ctx} tokens, couches sur la carte graphique : {gpu}, "
-            f"{settings.llm_max_tokens} tokens au plus par réponse"
+            f"{settings.llm_max_tokens} tokens au plus par réponse, dont {ANSWER_RESERVE_TOKENS} gardés pour la réponse (recopie des "
+            f"extraits arrêtée après {settings.llm_max_tokens - ANSWER_RESERVE_TOKENS} tokens si la réponse n'a pas commencé)"
         )
     effort = settings.llm_api_reasoning_effort
     return (

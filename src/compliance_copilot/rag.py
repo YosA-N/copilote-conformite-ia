@@ -18,7 +18,7 @@ from pathlib import Path
 from compliance_copilot.embeddings import Embedder
 from compliance_copilot.index import SearchResult, search
 from compliance_copilot.lexical import tokenize
-from compliance_copilot.llm import ChatModel, Generation
+from compliance_copilot.llm import ChatModel, Generation, StopCheck
 from compliance_copilot.adequacy import (  # noqa: F401 (ADEQUACY_* and cites_transfer_articles kept importable from rag)
     ADEQUACY_DECISIONS_URL,
     ADEQUACY_NOTE,
@@ -79,6 +79,12 @@ DISCLAIMER = (
 
 CHARS_PER_TOKEN = 3  # cautious estimate for French text, to check that the prompt fits in the context
 SAFETY_TOKENS = 200
+# Room kept for the answer (eval/results_v8.md). The local model sometimes copies whole paragraphs or lists as one
+# extract, and the answer was then cut for lack of room (7 of 288 local answers). If the model has not started its
+# answer after LLM_MAX_TOKENS - 800 tokens, the code stops the extracts there and asks for the answer: the longest
+# complete local answer measured was 712 tokens. The total stays within LLM_MAX_TOKENS.
+ANSWER_RESERVE_TOKENS = 800
+CUT_MARK = " […] (réponse coupée : la limite de longueur a été atteinte)"  # shown at the end of an answer still cut
 MIN_EXTRACT_WORDS = 6  # shorter quotes prove nothing
 CITATION = re.compile(r"\[([^\[\]\n]{1,30})\]")
 CITED_ITEM = re.compile(r"^\s*(\d+)\s*[a-z]?\s*$", re.IGNORECASE)  # "1", "1b" (point b of passage 1)
@@ -183,6 +189,7 @@ class RagAnswer:
     notes: list[str] = field(default_factory=list)  # fixed notes added by the code (not by the model) under the answer
     rewrite_terms: list[str] = field(default_factory=list)  # legal terms added to the question before the search (SEARCH_REWRITE)
     rewrite_seconds: float = 0.0
+    extracts_cut: bool = False  # the extracts ran too long: the code stopped them and asked for the answer (ANSWER_RESERVE_TOKENS)
 
     @property
     def verified_extracts(self) -> list[Extract]:
@@ -345,6 +352,56 @@ def finalize_answer(raw_text: str, passages: list[SearchResult]) -> tuple[str, l
     if not answer or not any(extract.verified for extract in extracts):
         return REFUSAL, extracts, True
     return normalize_citations(answer), extracts, False
+
+
+# ---------------------------------------------------------------- room kept for the answer
+
+
+CLOSED_LINE = re.compile(rf"[{CLOSING_QUOTE}]\s*[*_]*(?:\[\d+[a-z]?\])?[*_]*\s*[.;,]?\s*$")  # « … » or « … »[2]
+SENTENCE_END = re.compile(r"(?<!\d)[.;](?=\s)")  # end of a sentence or of a list point; not « 3. » (a paragraph number)
+
+
+def extracts_overrun(cap: int) -> StopCheck:
+    """Stop the generation once `cap` tokens are written if the model has not started its answer yet."""
+    return lambda text, count: count >= cap and not ANSWER_HEADER.search(text)
+
+
+def complete_extracts(text: str) -> str:
+    """The extracts written before the code stopped them, ready to be continued by « RÉPONSE : ».
+
+    The unfinished last extract is cut after its last complete sentence or list point, and « … » marks the cut (what
+    is kept is still found word for word); with fewer than MIN_EXTRACT_WORDS words left, it is dropped. Lines written
+    after the last closed extract (a header begun, « RÉPO ») are dropped too."""
+    lines = text.rstrip().split("\n")
+    last = max((i for i, line in enumerate(lines) if ITEM_START.match(line)), default=None)
+    if last is None:
+        return text.rstrip()
+    closed = [i for i in range(last, len(lines)) if CLOSED_LINE.search(lines[i])]
+    if closed:
+        return "\n".join(lines[: closed[-1] + 1])
+    item = "\n".join(lines[last:]).rstrip()
+    ends = [match.end() for match in SENTENCE_END.finditer(item)]
+    kept = item[: ends[-1]] if ends else ""
+    quoted = re.split(rf"[{OPENING_QUOTE}]", kept, maxsplit=1)[-1]
+    if len(quoted.split()) < MIN_EXTRACT_WORDS:
+        return "\n".join(lines[:last]).rstrip()
+    return "\n".join(lines[:last] + [f"{kept} … »"])
+
+
+def continued_generation(first: Generation, prefill: str, second: Generation) -> Generation:
+    """The stopped extracts and the answer written after them, as one generation (tokens and times added up)."""
+    tokens = first.completion_tokens + second.completion_tokens
+    writing = sum(part.completion_tokens / part.tokens_per_second for part in (first, second) if part.tokens_per_second)
+    return Generation(
+        text=prefill + second.text,
+        prompt_tokens=first.prompt_tokens + second.prompt_tokens,
+        completion_tokens=tokens,
+        seconds=first.seconds + second.seconds,
+        tokens_per_second=tokens / writing if writing else 0.0,
+        truncated=second.truncated,
+        reasoning=second.reasoning,
+        stopped=True,
+    )
 
 
 class AnswerStream:
@@ -817,15 +874,33 @@ def answer_from_passages(
     """Have the model answer from the given passages (also used to compare models or prompts on the same passages).
 
     With judge=True, a second short call checks that the verified extracts answer the question directly;
-    if not, the answer is replaced by ABSTENTION. Nothing is streamed then, since the verdict comes last."""
+    if not, the answer is replaced by ABSTENTION. Nothing is streamed then, since the verdict comes last.
+
+    If the model is still copying extracts when only ANSWER_RESERVE_TOKENS remain, the code stops it, keeps the complete
+    extracts and has the model continue from « RÉPONSE : » (prefill), with the tokens left. An answer still cut ends
+    with CUT_MARK."""
     stream = AnswerStream(on_text, passages) if on_text and not judge else None
+    messages = build_messages(question, passages, system_prompt)
+    cap = chat_model.max_tokens - ANSWER_RESERVE_TOKENS
     waited_before = getattr(chat_model, "waited_seconds", 0.0)  # only an API backend waits for rate limits
     start = time.perf_counter()
-    generation = chat_model.generate(build_messages(question, passages, system_prompt), on_text=stream.feed if stream else None)
+    generation = chat_model.generate(messages, on_text=stream.feed if stream else None,
+                                     should_stop=extracts_overrun(cap) if cap > 0 else None)
+    extracts_cut = generation.stopped
+    if extracts_cut:  # nothing was shown yet (the extracts are held back): the answer is streamed from a new start
+        prefill = f"{complete_extracts(generation.text)}\n\nRÉPONSE :\n"
+        stream = AnswerStream(on_text, passages) if stream else None
+        if stream:
+            stream.feed(prefill)
+        answer_part = chat_model.generate(messages + [{"role": "assistant", "content": prefill}], on_text=stream.feed if stream else None,
+                                          max_tokens=chat_model.max_tokens - generation.completion_tokens)
+        generation = continued_generation(generation, prefill, answer_part)
     generation_wait = getattr(chat_model, "waited_seconds", 0.0) - waited_before
     generation_seconds = time.perf_counter() - start - generation_wait
     if stream:
         stream.close()
+        if generation.truncated and stream.state == "answer":
+            on_text(CUT_MARK)
 
     text, extracts, refused = finalize_answer(generation.text, passages)
     answer_written = bool(split_answer(generation.text)[1])
@@ -846,6 +921,13 @@ def answer_from_passages(
     warnings = _warnings(
         found if found is not None else len(passages), passages, chat_model, generation, extracts, not shown, citations, answer_written, text,
     )
+    if extracts_cut:
+        warnings.insert(0, (
+            f"Extraits trop longs : le code a arrêté leur recopie après {cap} tokens pour garder au moins {ANSWER_RESERVE_TOKENS} "
+            "tokens à la réponse (dernier extrait raccourci ou retiré ; le passage complet est dans les sources)."
+        ))
+    if shown and generation.truncated:  # after the checks of the text, which must not read the mark as a sentence of the answer
+        text = text.rstrip() + CUT_MARK
     if abstained:
         warnings.append(
             "Contrôle de pertinence : les extraits retenus ne répondent pas directement à la question. La réponse du modèle "
@@ -879,6 +961,7 @@ def answer_from_passages(
         judge_seconds=judge_seconds,
         wait_seconds=getattr(chat_model, "waited_seconds", 0.0) - waited_before,
         notes=fixed_notes(passages, cited),
+        extracts_cut=extracts_cut,
     )
 
 

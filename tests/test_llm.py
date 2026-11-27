@@ -83,6 +83,41 @@ def test_answer_stopped_by_the_length_limit_is_marked_as_truncated(monkeypatch):
     assert OllamaChatModel(BASE_URL, "ministral-3:3b").generate(MESSAGES).truncated is True
 
 
+def test_caller_can_stop_the_stream_and_the_pieces_are_counted(monkeypatch):
+    pieces = [{"message": {"content": word}, "done": False} for word in ("EXTRAITS", " :", " - [1]", " « long")]
+    response = streamed(*pieces, END)
+    monkeypatch.setattr(llm.urllib.request, "urlopen", lambda request, timeout: response)
+    shown, checked = [], []
+
+    def stop_after_three(text, count):
+        checked.append((text, count))
+        return count >= 3
+
+    generation = OllamaChatModel(BASE_URL, "ministral-3:3b").generate(MESSAGES, on_text=shown.append, should_stop=stop_after_three)
+
+    assert generation.stopped and not generation.truncated
+    assert generation.text == "EXTRAITS : - [1]" and shown == ["EXTRAITS", " :", " - [1]"]
+    assert generation.completion_tokens == 3 and checked[-1] == ("EXTRAITS : - [1]", 3)
+    assert response.closed  # leaving the stream closes the connection, which stops Ollama
+
+
+def test_limit_of_one_call_replaces_the_model_limit(sent_bodies):
+    model = OllamaChatModel(BASE_URL, "ministral-3:3b", max_tokens=2000)
+
+    model.generate(MESSAGES, max_tokens=800)
+    model.generate(MESSAGES)
+
+    assert [body["options"]["num_predict"] for body in sent_bodies] == [800, 2000]
+
+
+def test_continued_assistant_message_is_sent_as_is(sent_bodies):
+    prefill = [*MESSAGES, {"role": "assistant", "content": "EXTRAITS :\n- [1] « … »\n\nRÉPONSE :\n"}]
+
+    generation = OllamaChatModel(BASE_URL, "ministral-3:3b").generate(prefill)
+
+    assert sent_bodies[0]["messages"] == prefill and not generation.stopped
+
+
 def test_unreachable_ollama_gives_a_clear_error(monkeypatch):
     fail_with(monkeypatch, urllib.error.URLError("connection refused"))
 
@@ -170,6 +205,16 @@ def test_api_answer_is_read_with_its_statistics_and_rate_limits(monkeypatch, api
     assert requests[0].full_url == f"{API_URL}/chat/completions"
     assert requests[0].get_header("Authorization") == f"Bearer {FAKE_KEY}"
     assert requests[0].get_header("User-agent") == llm.USER_AGENT  # Python's default user agent gets a 403 from the API's front
+
+
+def test_api_answer_is_not_streamed_so_it_is_never_stopped_but_takes_the_limit_of_the_call(monkeypatch, api_model):
+    model, _ = api_model
+    requests = answer_in_turn(monkeypatch, FakeAPIResponse(api_answer()))
+
+    generation = model.generate(MESSAGES, should_stop=lambda text, count: True, max_tokens=800)
+
+    assert generation.text == "Bonjour [1]" and not generation.stopped
+    assert json.loads(requests[0].data)["max_completion_tokens"] == 800
 
 
 def test_api_answer_stopped_by_the_length_limit_is_marked_as_truncated(monkeypatch, api_model):
