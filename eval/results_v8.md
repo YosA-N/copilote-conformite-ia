@@ -1,6 +1,6 @@
 # Résultats v8 : réponses locales coupées (27/11/2026)
 
-Branche `fix/truncated-answers`, partie de `eval/exam-2`. Question posée après l'examen 2 : pourquoi des réponses du mode local s'arrêtent-elles au milieu d'une phrase ? À l'examen 2, e17 (passe 3) a été relue « partiel » pour cette raison, et e01 (passes 1 et 2) était coupée aussi, mais remplacée par une abstention du juge (`eval/results_v7.md`, section 7).
+Branche `fix/truncated-answers`, partie de `eval/exam-2`, puis mise à jour avec `main` après la fusion de l'examen 2 (PR #18). Question posée après l'examen 2 : pourquoi des réponses du mode local s'arrêtent-elles au milieu d'une phrase ? À l'examen 2, e17 (passe 3) a été relue « partiel » pour cette raison, et e01 (passes 1 et 2) était coupée aussi, mais remplacée par une abstention du juge (`eval/results_v7.md`, section 7).
 
 Mesures faites sur secteur (`BatteryStatus` = 2, vérifié avant et après chaque étape), avec Ollama 0.40.18 et la configuration locale de l'examen 2 (`exam2-config` : sans reformulation ni reranker, `LLM_MAX_TOKENS=2000`).
 
@@ -145,17 +145,39 @@ Entre parenthèses : temps faussés par la batterie.
 - **q23** : liste des pratiques interdites de l'art. 5 ; à la passe 1, la liste est partielle sans « parmi d'autres cas », et la phrase finale reste vague (« sauf dans les cas spécifiques autorisés »).
 - **e01** : abstention du juge aux 3 passes, comme à l'examen 2 (les art. 6 et 13 du RGPD manquent dans les passages).
 
-## 7. Relecture de l'auteur (à faire)
+## 7. Relecture de l'auteur (27/11/2026)
 
-Seules les réponses où la garde s'est déclenchée ont changé de chemin. Les relire suffit :
-- passe 1 : q04 (`answers_v8_local.md`), q23 (`answers_v8_local_v1.md`), e01 et e17 (`answers_v8_local_exam2.md`) ;
-- passes 2 et 3 : `answers_v8_local_reserve_2.md` et `_3.md`. Ces fichiers contiennent aussi q14 et a03, sans garde : leur relecture est facultative, mais `review_summary.py --check` demande que chaque relecture couvre toutes les questions de son fichier.
+Les six questions de la section 6.3, à chacune des 3 passes :
+- `answers_v8_local_reserve_1.md` : les réponses de la passe 1, recopiées telles quelles depuis `answers_v8_local*.md`, sans rien régénérer, avec le même en-tête que les passes 2 et 3 ;
+- `answers_v8_local_reserve_2.md` et `_3.md`.
 
-Le point à trancher est e17, selon la règle de décision : aucune réponse dangereuse créée en mode local.
+Verdicts de l'auteur, mot pour mot, dans `eval/reviews/v8_local_reserve_1.jsonl`, `_2.jsonl` et `_3.jsonl` (`review_summary.py --check` : cohérent).
+
+| Question | Garde | Passe 1 | Passe 2 | Passe 3 | Examen 2, sans la garde (passes 1, 2, 3) |
+|---|---|---|---|---|---|
+| q04 | 3/3 | juste | juste | juste | — |
+| q14 | 0/3 | **dangereux** | partiel | faux | — |
+| q23 | 3/3 | partiel | partiel | partiel | — |
+| a03 | 0/3 | faux (abstention) | faux (abstention) | faux (abstention) | — |
+| e01 | 3/3 | faux (abstention) | faux (abstention) | faux (abstention) | faux, faux, faux (abstentions) |
+| e17 | 3/3 | **dangereux** | **dangereux** | **dangereux** | dangereux, dangereux, partiel (coupée) |
+| **Total (juste / partiel / faux / dangereux)** | | **1 / 1 / 2 / 2** | **1 / 2 / 2 / 1** | **1 / 1 / 3 / 1** | |
+
+Commentaires de l'auteur, en bref :
+- **q23** : interdictions citées justes, mais il manque la police prédictive (art. 5, § 1, d) et le moissonnage d'images faciales (e) ;
+- **e17** : haut risque juste, mais la vérification par deux personnes de l'art. 14, § 5 est imposée au tri de CV, et l'art. 5, § 1, c est présenté comme interdisant l'évaluation sur des traits de personnalité ;
+- **q14**, sans la garde : à la passe 1, l'opposition à la prospection est rattachée à des « raisons tenant à sa situation particulière » (art. 21, § 1), alors qu'elle est possible à tout moment sans justification ;
+- **a03 et e01** : abstentions, car l'article attendu manque dans les passages.
+
+**Décision de l'auteur : A et B gardés.**
+- **e17** : la garde ne crée pas l'erreur de rédaction, elle arrête de la cacher. La passe 3 de l'examen n'était « partielle » que parce qu'elle était coupée, et cacher une erreur par une coupure n'est pas une sécurité.
+- **Les verdicts de l'examen 2 ne changent pas** : ils jugent les réponses affichées à l'époque.
+- **q14**, sans la garde, reçoit 3 verdicts différents en 3 passes : cela confirme que le mode local n'est pas fiable.
+- **La règle 7 du prompt**, cause racine, n'est pas modifiée : piste notée pour plus tard (section 8).
 
 ## 8. Limites et suite
 
-- **La racine reste** : le modèle local recopie toujours des listes entières. La garde l'empêche de couper la réponse, pas de lire, dans le passage, un paragraphe qui ne s'applique pas. Une prochaine étape possible, dans une PR à part : résoudre le conflit entre la règle 7 (tous les cas d'une liste) et la limite de six extraits, par exemple en demandant la phrase qui annonce la liste puis seulement les cas qui concernent la question, avec « parmi d'autres cas ». Toutes les réponses changeraient : il faudrait remesurer et relire en entier.
+- **La racine reste** : le modèle local recopie toujours des listes entières. La garde l'empêche de couper la réponse, pas de lire, dans le passage, un paragraphe qui ne s'applique pas. **La règle 7 du prompt n'est pas modifiée (décision de l'auteur) : piste notée pour plus tard.** Il s'agirait de résoudre le conflit entre la règle 7 (tous les cas d'une liste) et la limite de six extraits, par exemple en demandant la phrase qui annonce la liste puis seulement les cas qui concernent la question, avec « parmi d'autres cas ». Toutes les réponses changeraient : il faudrait remesurer et relire en entier.
 - **Le second appel relit tout le prompt** : Ollama ne réutilise pas son cache après l'arrêt de la génération (environ 15 s).
 - **Une réponse longue peut encore être coupée** (e01 dans le prototype) : la marque « […] » le montre alors dans la réponse elle-même.
 - **Le mode distant ne change pas** : sa réponse n'est pas diffusée au fil de l'écriture, et aucune réponse distante n'a été coupée (0 sur 261).
