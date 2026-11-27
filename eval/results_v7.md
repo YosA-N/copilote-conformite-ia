@@ -176,9 +176,16 @@ Observations (notées, **pas corrigées** : configuration figée) :
 - Reformulation : termes identiques aux 3 mesures pour 4 questions sur 24 seulement (instabilité déjà connue, `results_v6.md`, section 6).
 - e12 (géolocalisation, sujet de l'ancien exemple du prompt de reformulation) : introuvable en local, variable en distant.
 
-## 6. Réponses : mesures du code (provisoire, 24/11/2026)
+## 6. Réponses : mesures du code (6 passes, 24 et 27/11/2026)
 
-Passes faites le 24/11/2026, sur secteur du début à la fin (`BatteryStatus` = 2 avant chaque passe) : `exam2_local_1` à `_3` (14:47 à 15:51) et `exam2_remote_1` (15:51 à 16:13, sans arrêt dû au quota). Passes distantes 2 et 3 à venir. **Mesures du code, pas des verdicts** : la relecture de l'auteur viendra après les 6 passes.
+Passes faites sur secteur du début à la fin (`BatteryStatus` = 2 avant et après chaque passe), code identique à `exam2-config` (vérifié avant chaque passe et chaque reprise) :
+
+- `exam2_local_1` à `_3` : 24/11/2026, 14:47 à 15:51 ;
+- `exam2_remote_1` : 24/11/2026, 15:51 à 16:13 ;
+- `exam2_remote_2` : e01 à e13 le 24/11/2026 (16:17 à 16:28), puis arrêt par le quota de Groq ; e14 à he03 le 27/11/2026 (14:33 à 14:43), avec `--resume` (l'en-tête du fichier le signale) ;
+- `exam2_remote_3` : 27/11/2026, 14:43 à 15:07.
+
+**Mesures du code, pas des verdicts** : la relecture de l'auteur des 168 réponses vient ensuite.
 
 | Série | Réponses données (24) | Abstentions du juge | Refus (aucun extrait vérifié) | e05 et hors sujet refusés | Extraits vérifiés / recopiés | Réponses avec alerte | Réponses coupées | Total : médian · max |
 |---|---|---|---|---|---|---|---|---|
@@ -186,44 +193,48 @@ Passes faites le 24/11/2026, sur secteur du début à la fin (`BatteryStatus` = 
 | local_2 | 11 | 11 | 2 | 4/4 | 72/82 | 19/28 | 1 (e01) | 43 s · 75 s |
 | local_3 | 10 | 11 | 3 | 4/4 | 77/84 | 19/28 | 1 (e17) | 44 s · 83 s |
 | remote_1 | 13 | 10 | 1 | 4/4 | 118/120 | 14/28 | 0 | 29 s · 61 s |
+| remote_2 | 13 | 10 | 1 | 4/4 | 118/119 | 17/28 | 0 | 30 s · 52 s |
+| remote_3 | 14 | 9 | 1 | 4/4 | 117/118 | 15/28 | 0 | 32 s · 46 s |
 
+- En moyenne sur 3 passes : réponses données **10,7/24 en local**, **13,3/24 en distant**.
 - « e05 et hors sujet refusés » : e05 (bandeau cookies, directive 2002/58/CE hors corpus) n'a pas d'article attendu et est compté avec he01 à he03 par `compare_answers.py`.
-- Temps distant : génération 2 s médiane ; 487 s d'attente du quota par minute sur 17 questions, non comptées.
+- Temps distant : génération 2 s médiane ; attente du quota par minute non comptée (487 s, 384 s et 501 s selon la passe).
 
 **Article attendu (paragraphe précisé) parmi les passages donnés au modèle, et statut de la réponse** (R = réponse, A = abstention du juge, X = refus ; + article présent, − absent) :
 
-| # | local_1 | local_2 | local_3 | remote_1 |
-|---|---|---|---|---|
-| e01 | A− | A− | A− | A− |
-| e02 | R+ | R+ | R+ | R+ |
-| e03 | X− | X− | X− | A+ |
-| e04 (nouveau) | A− | A− | A− | A− |
-| e05 (nouveau) | A | A | A | X |
-| e06 | R+ | R+ | R+ | R+ |
-| e07 | R− | R− | R− | R+ |
-| e08 | A+ | A+ | A+ | A+ |
-| e09 | R+ | R+ | R+ | R+ |
-| e10 (nouveau) | A− | A− | A− | X− |
-| e11 | R+ | R+ | A+ | A+ |
-| e12 (nouveau) | X− | X− | X− | A+ |
-| e13 | A− | A− | X− | A+ |
-| e14 | A+ | A+ | A+ | R+ |
-| e15 | R+ | R+ | R+ | R+ |
-| e16 | A+ | A+ | A+ | A− |
-| e17 | R+ | R+ | R+ | R+ |
-| e18 | R+ | R+ | R+ | R+ |
-| e19 | R+ | R+ | R+ | R+ |
-| e20 | A+ | A+ | A+ | R+ |
-| e21 | R+ | R+ | R+ | A+ |
-| e22 | A− | A− | A− | R− |
-| e23 (nouveau) | A− | A− | A− | R− |
-| e24 | R+ | R+ | R+ | R+ |
-| e25 (nouveau) | A− | A− | A− | A+ |
-| he01 à he03 | X | X | X | X |
+| # | local_1 | local_2 | local_3 | remote_1 | remote_2 | remote_3 |
+|---|---|---|---|---|---|---|
+| e01 | A− | A− | A− | A− | A− | A− |
+| e02 | R+ | R+ | R+ | R+ | R+ | R+ |
+| e03 | X− | X− | X− | A+ | A+ | A+ |
+| e04 (nouveau) | A− | A− | A− | A− | A− | A− |
+| e05 (nouveau) | A | A | A | X | X | X |
+| e06 | R+ | R+ | R+ | R+ | R+ | R+ |
+| e07 | R− | R− | R− | R+ | R+ | R+ |
+| e08 | A+ | A+ | A+ | A+ | A+ | A+ |
+| e09 | R+ | R+ | R+ | R+ | R+ | R+ |
+| e10 (nouveau) | A− | A− | A− | X− | X− | X+ |
+| e11 | R+ | R+ | A+ | A+ | A+ | A+ |
+| e12 (nouveau) | X− | X− | X− | A+ | A+ | A+ |
+| e13 | A− | A− | X− | A+ | A+ | A+ |
+| e14 | A+ | A+ | A+ | R+ | R+ | R+ |
+| e15 | R+ | R+ | R+ | R+ | R+ | R+ |
+| e16 | A+ | A+ | A+ | A− | A− | A− |
+| e17 | R+ | R+ | R+ | R+ | R+ | R+ |
+| e18 | R+ | R+ | R+ | R+ | R+ | R+ |
+| e19 | R+ | R+ | R+ | R+ | R+ | R+ |
+| e20 | A+ | A+ | A+ | R+ | R+ | R+ |
+| e21 | R+ | R+ | R+ | A+ | A+ | A+ |
+| e22 | A− | A− | A− | R− | R+ | R+ |
+| e23 (nouveau) | A− | A− | A− | R− | R− | R− |
+| e24 | R+ | R+ | R+ | R+ | R+ | R+ |
+| e25 (nouveau) | A− | A− | A− | A+ | A+ | R+ |
+| he01 à he03 | X | X | X | X | X | X |
 
-Observations (notées, pas corrigées) :
+Observations (notées, **pas corrigées** : configuration figée) :
 
-- Les 3 passes locales sont presque identiques (même recherche, température 0,1) : seules e11 et e13 changent de statut en local_3.
-- Abstention avec l'article attendu présent : local e08, e14, e16, e20 (aux 3 passes, plus e11 en local_3) ; distant e03, e08, e11, e12, e13, e21, e25 (7 questions). Le juge qui s'abstient avec le bon article était déjà noté à l'examen final (q30, q41).
-- Réponse donnée **sans** l'article attendu : e07 en local (art. 28 présent, mais pas son § 3), e22 et e23 en distant. À l'examen précédent, une réponse sans l'article attendu (a03, v6b) avait été relue « dangereuse ».
-- Sujets nouveaux : une seule réponse donnée sur 24 (e23, distant, sans l'article attendu) ; tout le reste est abstention ou refus.
+- **Stabilité** : les 3 passes locales sont presque identiques (même recherche, température 0,1) ; seules e11 et e13 changent de statut en local_3. En distant, l'article attendu est présent pour 18, 19 puis 20 questions sur 24 (reformulation instable) ; seules e22 (article absent puis présent), e10 (article présent en remote_3, toujours refusée) et e25 (répondue en remote_3) changent.
+- **Abstention avec l'article attendu présent**, aux 3 passes : local e08, e14, e16, e20 (plus e11 en local_3) ; distant e03, e08, e11, e12, e13, e21 (plus e25 deux fois sur trois). Le juge qui s'abstient avec le bon article était déjà noté à l'examen final (q30, q41).
+- **Réponse donnée sans l'article attendu** : e07 en local aux 3 passes (art. 28 présent, mais pas son § 3) ; e23 en distant aux 3 passes ; e22 en remote_1. À l'examen précédent, une réponse sans l'article attendu (a03, v6b) avait été relue « dangereuse ».
+- **Sujets nouveaux** (e04, e05, e10, e12, e23, e25 ; 18 réponses par mode) : local 0 réponse donnée ; distant 4 (e23 ×3 sans l'article attendu, e25 ×1). e05, hors corpus, est refusée dans les 6 passes.
+- Les verdicts de l'auteur seront comptés par passe, puis en moyenne par mode, avec le nombre de questions qui ont reçu au moins une réponse dangereuse, et à part pour les sujets nouveaux.
