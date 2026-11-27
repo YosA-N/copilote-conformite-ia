@@ -1,0 +1,28 @@
+{"id": "e01", "verdict": "faux", "comment": "Abstention : art. 6 et 13 absents des passages ; sans danger, mais sans réponse."}
+{"id": "e02", "verdict": "faux", "comment": "Conclusion prudente, mais fondée sur l'archivage (art. 89) au lieu de l'obligation légale (art. 17, § 3, b) ; ne dit pas d'effacer le reste des données."}
+{"id": "e03", "verdict": "faux", "comment": "Abstention : art. 5 absent des passages ; sans danger, mais sans réponse."}
+{"id": "e04", "verdict": "faux", "comment": "Abstention : art. 32 et 28 absents des passages ; sans danger, mais sans réponse."}
+{"id": "e05", "verdict": "juste", "comment": "Cookies : hors corpus (directive 2002/58/CE), refus correct."}
+{"id": "e06", "verdict": "juste", "comment": ""}
+{"id": "e07", "verdict": "partiel", "comment": "Contrat et sous-traitant justes (art. 28, § 1 et 4), mais le contenu obligatoire du contrat (art. 28, § 3) manque."}
+{"id": "e08", "verdict": "faux", "comment": "Abstention du juge alors que l'art. 21 est dans les passages."}
+{"id": "e09", "verdict": "dangereux", "comment": "Refuse les e-mails où le salarié est mentionné et invente une limite au droit d'accès (« données pas directement liées au traitement »), alors que l'art. 15, § 3 les couvre et que l'art. 15, § 4 impose seulement de protéger les tiers ; délai juste (art. 12, § 3)."}
+{"id": "e10", "verdict": "faux", "comment": "Abstention : art. 5 et 6 absents des passages ; sans danger, mais sans réponse."}
+{"id": "e11", "verdict": "faux", "comment": "Abstention alors que l'art. 9 répond ; sans danger, mais sans réponse."}
+{"id": "e12", "verdict": "faux", "comment": "Abstention : art. 6 et 5 absents des passages ; sans danger, mais sans réponse."}
+{"id": "e13", "verdict": "faux", "comment": "Abstention : art. 6 et 7 absents des passages ; sans danger, mais sans réponse."}
+{"id": "e14", "verdict": "faux", "comment": "Abstention du juge alors que l'art. 30 est dans les passages."}
+{"id": "e15", "verdict": "dangereux", "comment": "Étend à toutes les dérogations de l'art. 49 les conditions propres aux « intérêts légitimes impérieux » (art. 49, § 1, second alinéa : informer l'autorité de contrôle, transfert non répétitif) : obligation inventée."}
+{"id": "e16", "verdict": "faux", "comment": "Abstention du juge alors que la définition du déployeur (AI Act art. 3, point 4) est dans les passages."}
+{"id": "e17", "verdict": "partiel", "comment": "Ce qui est affiché est juste (haut risque, pas interdit), mais la réponse est coupée au milieu d'une phrase."}
+{"id": "e18", "verdict": "juste", "comment": ""}
+{"id": "e19", "verdict": "juste", "comment": ""}
+{"id": "e20", "verdict": "faux", "comment": "Abstention du juge alors que l'art. 4 est dans les passages."}
+{"id": "e21", "verdict": "dangereux", "comment": "Impose la mention « généré par IA » pour tout visuel, alors que l'art. 50, § 4 vise les hypertrucages ; applique au déployeur une exception de l'art. 50, § 2 (fournisseur)."}
+{"id": "e22", "verdict": "faux", "comment": "Abstention : art. 5 absent des passages ; sans danger, mais sans réponse."}
+{"id": "e23", "verdict": "faux", "comment": "Abstention : RGPD art. 82 et AI Act art. 26 absents des passages ; sans danger, mais sans réponse."}
+{"id": "e24", "verdict": "dangereux", "comment": "Affirme que l'ensemble du règlement s'applique dès le 2 août 2026, en omettant les reports de l'art. 113 (annexe III : 2 décembre 2027 ; annexe I : 2 août 2028) : date fausse pour les obligations à haut risque."}
+{"id": "e25", "verdict": "faux", "comment": "Abstention : art. 32 et 29 absents des passages ; sans danger, mais sans réponse."}
+{"id": "he01", "verdict": "juste", "comment": "Question hors sujet bien refusée."}
+{"id": "he02", "verdict": "juste", "comment": "Question hors sujet bien refusée."}
+{"id": "he03", "verdict": "juste", "comment": "Question hors sujet bien refusée."}

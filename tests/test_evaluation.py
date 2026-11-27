@@ -1,5 +1,6 @@
 """Offline tests for the retrieval measures, the files of test questions and the human reviews."""
 
+import importlib.util
 import re
 
 import pytest
@@ -131,6 +132,27 @@ def test_author_questions_are_well_formed_if_present():
     assert len({q.id for q in author}) == len(author)
     assert not {q.id for q in author} & {q.id for q in others}
     check_question_format(author)
+
+
+def test_exam2_questions_are_well_formed_and_new():
+    # format only: written outside the project (18/11/2026), never used to tune anything (eval/results_v7.md)
+    exam = load_questions(EVAL_DIR / "questions_exam2.jsonl")
+    others = [q for other in EVAL_DIR.glob("questions_*.jsonl") if other.name != "questions_exam2.jsonl" for q in load_questions(other)]
+
+    assert [q.id for q in exam] == [f"e{i:02d}" for i in range(1, 26)] + ["he01", "he02", "he03"]
+    assert not {q.id for q in exam} & {q.id for q in others}
+    assert not {q.question for q in exam} & {q.question for q in others}
+    assert [q.id for q in exam if not q.expected] == ["e05", "he01", "he02", "he03"]  # e05: cookie rule outside the corpus
+    check_question_format(exam)
+
+
+def test_retrieval_comparison_never_measures_the_exam_by_default():
+    spec = importlib.util.spec_from_file_location("compare_retrieval", EVAL_DIR.parent / "scripts" / "compare_retrieval.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert "exam2" in module.SETS
+    assert module.TUNING_SETS == ["v0", "v1", "v2", "author"]
 
 
 # ---------------------------------------------------------------- human reviews (eval/rubric.md)
