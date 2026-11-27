@@ -101,7 +101,7 @@ Ces écarts sont **un effet de l'exemple, pas seulement du hasard** : les termes
 
 ## 4. Configuration figée (24/11/2026) et méthode
 
-**Configuration figée** : le commit de la branche `eval/exam-2` qui ajoute cette section (étiquette Git locale `exam2-config`). Après cette étiquette : **aucun changement de code, de prompt, de lexique ni de réglage** avant la fin de l'examen, même après avoir vu une réponse ou un résultat ; ce qui est observé est noté, pas corrigé.
+**Configuration figée** : le commit de la branche `eval/exam-2` qui ajoute cette section (étiquette Git `exam2-config`, publiée sur GitHub le 27/11/2026). Après cette étiquette : **aucun changement de code, de prompt, de lexique ni de réglage** avant la fin de l'examen, même après avoir vu une réponse ou un résultat ; ce qui est observé est noté, pas corrigé.
 
 | | Mode local (défaut) | Mode distant |
 |---|---|---|
@@ -238,3 +238,38 @@ Observations (notées, **pas corrigées** : configuration figée) :
 - **Réponse donnée sans l'article attendu** : e07 en local aux 3 passes (art. 28 présent, mais pas son § 3) ; e23 en distant aux 3 passes ; e22 en remote_1. À l'examen précédent, une réponse sans l'article attendu (a03, v6b) avait été relue « dangereuse ».
 - **Sujets nouveaux** (e04, e05, e10, e12, e23, e25 ; 18 réponses par mode) : local 0 réponse donnée ; distant 4 (e23 ×3 sans l'article attendu, e25 ×1). e05, hors corpus, est refusée dans les 6 passes.
 - Les verdicts de l'auteur seront comptés par passe, puis en moyenne par mode, avec le nombre de questions qui ont reçu au moins une réponse dangereuse, et à part pour les sujets nouveaux.
+
+## 7. Relecture humaine (27/11/2026)
+
+**Méthode** : 28 questions neuves écrites hors du projet (18/11/2026, par un assistant sans accès au projet), 3 passes par mode ; les 168 réponses relues par l'auteur selon `eval/rubric.md`, vérifiées à l'aveugle par un second relecteur sur les 22 cas décisifs ; en cas de désaccord, verdict le plus sévère (règle 1). Verdicts et commentaires mot pour mot dans `eval/reviews/exam2_local_1.jsonl` … `exam2_remote_3.jsonl` (`review_summary.py --check` : relectures cohérentes avec les réponses).
+
+| Série | Juste | Partiel | Faux | Dangereux |
+|---|---|---|---|---|
+| local_1 | 6 | 2 | 13 | 7 |
+| local_2 | 5 | 2 | 13 | 8 |
+| local_3 | 7 | 2 | 15 | 4 |
+| **Moyenne locale** | **6,0** | **2,0** | **13,7** | **6,3** |
+| remote_1 | 13 | 1 | 12 | 2 |
+| remote_2 | 14 | 1 | 12 | 1 |
+| remote_3 | 13 | 4 | 11 | 0 |
+| **Moyenne distante** | **13,3** | **2,0** | **11,7** | **1,0** |
+
+| En moyenne sur 3 passes | Local | Distant |
+|---|---|---|
+| Juste sur les 24 questions avec article attendu | 2,0 | 9,3 |
+| Questions qui ont reçu au moins une réponse dangereuse (sur 28) | 8 : e02, e06, e09, e11, e15, e17, e21, e24 (e09, e15, e21, e24 à chaque passe) | 2 : e22 (une passe), e23 (deux passes) |
+| 19 questions sur un sujet de réglage (juste / partiel / faux / dangereux) | 2,0 / 2,0 / 8,7 / 6,3 | 9,3 / 1,7 / 7,7 / 0,3 |
+| 6 sujets nouveaux (e04, e05, e10, e12, e23, e25) | 1,0 / 0 / 5,0 / 0 (le seul « juste » : e05, refus correct, hors corpus) | 1,0 / 0,3 / 4,0 / 0,7 |
+| Questions au verdict identique aux 3 passes | 23 / 28 | 23 / 28 |
+
+Pour situer : à l'examen final (26 questions écrites par Claude, une seule passe), local 9 / 2 / 14 / 1, distant 13 / 1 / 11 / 1 (`eval/results_v5.md`).
+
+**Conclusions** :
+
+- **Mode local non fiable pour de vraies questions** : environ 6 réponses dangereuses sur 28 (6,3 en moyenne), qui reviennent à chaque passe pour e09, e15, e21 et e24 (droit d'accès limité à tort, conditions de l'art. 49 étendues, mention « généré par IA » imposée pour tout visuel, date d'application fausse).
+- **Mode distant** : environ 9 justes sur les 24 questions de droit (9,3 en moyenne) et 1 réponse dangereuse sur 28 en moyenne (e22 à une passe, e23 à deux passes).
+- **Beaucoup d'abstentions du juge alors que l'article attendu est dans les passages** : local e08, e14, e16, e20 ; distant e03, e08, e11, e12, e13, e21, e25. Presque toutes les réponses fausses sont des abstentions ou des refus, sans danger mais sans réponse.
+- **Méthode** : 28 questions neuves écrites hors du projet, 3 passes par mode, second relecteur à l'aveugle sur les 22 cas décisifs, verdict le plus sévère en cas de désaccord.
+- **Observé, non corrigé** : la réponse locale e17 de la passe 3 est coupée au milieu d'une phrase ; cause à chercher dans une prochaine PR. Le code l'avait signalée (alerte « Réponse coupée » : limite de 2 000 tokens atteinte, 2 000 tokens écrits) ; piste : les extraits recopiés (art. 5, § 1, annexe III, point 4, art. 14, par paragraphes entiers) ont pris presque tout le budget avant la réponse.
+
+Les questions de l'examen 2 ont été vues à la relecture : elles ne servent plus d'examen.

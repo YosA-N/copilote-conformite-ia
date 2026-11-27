@@ -133,19 +133,24 @@ Ces chiffres portent sur les 12 questions qui ont servi à régler le système :
 
 ## Résultats
 
-Des mesures à lire ensemble : les **questions de réglage** ont servi à régler le copilote (elles sont donc optimistes) ; l'**examen final** porte sur des questions qu'il n'avait jamais vues, posées une seule fois, sans rien changer ensuite. Détail : [`eval/results_v5.md`](eval/results_v5.md) (examen) et [`eval/results_v6.md`](eval/results_v6.md) (séance 7 ter).
+Des mesures à lire ensemble : les **questions de réglage** ont servi à régler le copilote (elles sont donc optimistes) ; l'**examen final** (une seule passe) et l'**examen 2** (3 passes par mode, verdicts en moyenne) portent sur des questions qu'il n'avait jamais vues, sans rien changer pendant l'examen. Détail : [`eval/results_v5.md`](eval/results_v5.md) (examen final), [`eval/results_v6.md`](eval/results_v6.md) (séance 7 ter) et [`eval/results_v7.md`](eval/results_v7.md) (examen 2).
 
 | | Recherche : article attendu dans les 5 passages (hit@5) | Verdicts, modèle local (juste / partiel / faux / dangereux) | Verdicts, mode distant (juste / partiel / faux / dangereux) |
 |---|---|---|---|
 | **Questions de réglage** (v0 et v1, 32 questions) | 26 / 27 | 17 / 5 / 4 / 6 | 25 / 5 / 2 / 0 |
 | **Après la séance 7 ter : réglage sur toutes les questions connues** (v0, v1, v2, auteur : 58 questions, dont les 26 de l'examen, vues depuis) — *réglage, pas un examen* | local 36 / 49 · distant 44 / 49 | 26 / 7 / 18 / 7 (¹) | 40 / 9 / 9 / 0 (²) |
 | **Examen final** (questions jamais vues, 26 questions) | **10 / 22** | **9 / 2 / 14 / 1** | **13 / 1 / 11 / 1** |
+| **Examen 2 (28 questions neuves, 3 passes, moyennes)** | **local 15 / 24 · distant 19–20 / 24** | **6,0 / 2,0 / 13,7 / 6,3** | **13,3 / 2,0 / 11,7 / 1,0** |
 
 (¹) Configuration locale inchangée par la séance 7 ter (reformulation et reclassement désactivés en local) : verdicts des mêmes réponses qu'avant. (²) Mode distant avec reformulation et reclassement, relu avec l'ancien exemple du prompt de reformulation ; le hit@5 de 44 / 49 est mesuré avec le nouvel exemple (42 / 49 avec l'ancien). **Une seconde passe sur 29 de ces questions, avec la même configuration, a donné 4 réponses dangereuses** (contre 0 sur les mêmes questions à la première passe) : les réponses varient d'une passe à l'autre ([`eval/results_v6.md`](eval/results_v6.md), section 6.5).
 
-**Seule la ligne « examen final » porte sur des questions jamais vues**, et elle le restera jusqu'à l'examen 2, sur des questions neuves. La ligne « après la séance 7 ter » mesure des réglages faits en connaissant ces questions : elle est optimiste.
+**Le mode local n'est pas fiable pour de vraies questions** (plusieurs réponses dangereuses par série de 28 : 6,3 en moyenne à l'examen 2). **Le mode distant donne de meilleurs résultats, mais des réponses dangereuses restent possibles** (1 en moyenne) : **vérifiez toujours les articles cités.**
 
-À l'examen, la plupart des réponses fausses sont des refus prudents (« les passages trouvés ne traitent pas directement de votre question ») : le bon article n'avait pas été trouvé. Il reste une réponse dangereuse dans chaque mode : une date d'application inventée (local) et des données pseudonymisées présentées comme sortant du RGPD (distant). Les questions d'examen ont été écrites par Claude, qui connaissait le projet : c'est une mesure honnête, mais pas un test sur de vraies questions d'utilisateurs.
+**Seules les lignes « examen final » et « examen 2 » portent sur des questions jamais vues** au moment de l'examen (elles ont été vues depuis, à la relecture). La ligne « après la séance 7 ter » mesure des réglages faits en connaissant les questions de l'examen final : elle est optimiste.
+
+Les 28 questions de l'examen 2 ont été écrites hors du projet, par un assistant qui ne le connaissait pas ; chaque question a été posée 3 fois dans chaque mode, et les cas décisifs ont été vérifiés à l'aveugle par un second relecteur. Presque toutes les réponses fausses sont des refus prudents, souvent alors que le bon article avait été trouvé ; les réponses dangereuses du mode local reviennent d'une passe à l'autre ([`eval/results_v7.md`](eval/results_v7.md), section 7).
+
+À l'examen final, la plupart des réponses fausses sont des refus prudents (« les passages trouvés ne traitent pas directement de votre question ») : le bon article n'avait pas été trouvé. Il reste une réponse dangereuse dans chaque mode : une date d'application inventée (local) et des données pseudonymisées présentées comme sortant du RGPD (distant). Les questions d'examen ont été écrites par Claude, qui connaissait le projet : c'est une mesure honnête, mais pas un test sur de vraies questions d'utilisateurs.
 
 ## Limites connues
 
